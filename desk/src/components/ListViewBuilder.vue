@@ -46,7 +46,7 @@
   <ListView
     v-else-if="list.data?.data.length > 0"
     class="flex-1"
-    :columns="columns"
+    :columns="displayColumns"
     :rows="rows"
     row-key="name"
     :options="{
@@ -63,7 +63,7 @@
   >
     <ListHeader class="sm:mx-5 mx-3">
       <ListHeaderItem
-        v-for="column in columns"
+        v-for="column in displayColumns"
         :key="column.key"
         :item="column"
         @columnWidthUpdated="handleColumnResize"
@@ -120,6 +120,54 @@
     :icon="emptyState.icon"
     :description="emptyState.description"
   />
+
+  <!-- HLB-FORK: delete-reason — deleting a ticket asks why, and the answer is
+       kept. Agents delete genuine rubbish (spam that arrived by email, a ticket
+       created twice by a double-click) and that must stay possible; what must
+       not stay possible is a ticket vanishing with no record of why. The reason
+       is written to HLB Ticket Deletion Log BEFORE the delete, so it outlives
+       the ticket and can be reported on.
+
+       Only HD Ticket goes through here. Every other doctype keeps upstream's
+       plain confirm + `frappe.desk.reportview.delete_items`. -->
+  <Dialog
+    v-model="deleteReason.show"
+    :options="{ title: __('Delete ticket(s)') }"
+  >
+    <template #body-content>
+      <p class="text-p-sm text-ink-gray-6 mb-3">
+        {{
+          __(
+            "Deleting {0} ticket(s). This cannot be undone, so say why — the reason is kept after the ticket is gone.",
+            [deleteReason.names.length]
+          )
+        }}
+      </p>
+      <FormControl
+        v-model="deleteReason.text"
+        type="textarea"
+        :label="__('Reason for deletion')"
+        :placeholder="__('e.g. Spam received by email / duplicate of #0123')"
+        :disabled="deleteReason.loading"
+        @keydown.enter.meta="confirmTicketDelete"
+      />
+      <p v-if="deleteReason.error" class="text-p-sm text-ink-red-3 mt-2">
+        {{ deleteReason.error }}
+      </p>
+    </template>
+    <template #actions>
+      <Button
+        class="w-full"
+        variant="solid"
+        theme="red"
+        icon-left="trash-2"
+        :loading="deleteReason.loading"
+        :disabled="deleteReason.text.trim().length < 5"
+        :label="__('Delete')"
+        @click="confirmTicketDelete"
+      />
+    </template>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -146,9 +194,15 @@ import { useStorage } from "@vueuse/core";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import {
+  // HLB-FORK: delete-reason — Button, call, Dialog and FormControl are for the
+  // ticket delete dialog at the foot of the template.
+  Button,
+  call,
   createResource,
+  Dialog,
   Dropdown,
   FeatherIcon,
+  FormControl,
   frappeRequest,
   ListFooter,
   ListHeader,
@@ -233,6 +287,11 @@ const defaultOptions = reactive({
       label: __("Delete"),
       icon: "lucide-trash-2",
       onClick: (selections: Set<string>) => {
+        // HLB-FORK: delete-reason — tickets take the reason dialog instead.
+        if (options.value.doctype === "HD Ticket") {
+          openTicketDeleteDialog(selections);
+          return;
+        }
         $dialog({
           title: __("Delete"),
           message: __("Are you sure you want to delete {0} item(s)?", [
@@ -251,10 +310,72 @@ const defaultOptions = reactive({
           ],
         });
       },
-      condition: () => !options.value.isCustomerPortal && isManager,
+      // HLB-FORK: delete-reason — any agent may delete a ticket, because the
+      // reason dialog is what makes a delete accountable, not the rank of the
+      // person pressing the button. Every OTHER doctype keeps upstream's
+      // manager-only gate: deleting an Agent or a Team is a different kind of
+      // act and is not what this change is about.
+      condition: () =>
+        !options.value.isCustomerPortal &&
+        (isManager || options.value.doctype === "HD Ticket"),
     },
   ],
 });
+
+// HLB-FORK: delete-reason — state + handler for the ticket delete dialog above.
+const deleteReason = reactive({
+  show: false,
+  text: "",
+  error: "",
+  loading: false,
+  names: [] as string[],
+});
+
+function openTicketDeleteDialog(selections: Set<string>) {
+  deleteReason.names = Array.from(selections) as string[];
+  deleteReason.text = "";
+  deleteReason.error = "";
+  deleteReason.loading = false;
+  deleteReason.show = true;
+}
+
+function confirmTicketDelete() {
+  const reason = deleteReason.text.trim();
+  if (reason.length < 5) {
+    deleteReason.error = __("Give a reason of at least 5 characters.");
+    return;
+  }
+  deleteReason.loading = true;
+  deleteReason.error = "";
+  capture("bulk_delete_with_reasonHD Ticket");
+
+  call("company_helpdesk.setup.deletion.delete_with_reason", {
+    tickets: JSON.stringify(deleteReason.names),
+    reason,
+  })
+    .then((result: { deleted: string[]; failed: { ticket: string }[] }) => {
+      const deleted = result?.deleted?.length || 0;
+      const failed = result?.failed || [];
+      if (deleted) {
+        toast.success(__("{0} ticket(s) deleted", [deleted]));
+      }
+      // Report the stragglers by name. A bulk delete where one ticket was
+      // already gone should remove the rest and say which one it could not.
+      if (failed.length) {
+        toast.error(
+          __("Could not delete: {0}", [failed.map((f) => f.ticket).join(", ")])
+        );
+      }
+      deleteReason.show = false;
+      reload();
+    })
+    .catch((error: Error) => {
+      deleteReason.error = error?.message || __("Could not delete.");
+    })
+    .finally(() => {
+      deleteReason.loading = false;
+    });
+}
 
 function handleBulkDelete(hide: Function, selections: Set<string>) {
   capture("bulk_delete" + props.options.doctype);
@@ -428,6 +549,31 @@ const rows = computed(() => {
   return list.data?.data;
 });
 const columns = ref([]);
+
+// HLB-FORK: column-label-i18n — run column labels through `__()` for display.
+//
+// Column labels arrive as plain strings from the server: HD Ticket's are Python
+// literals in `default_list_data` ("Customer", "Team", "First response") and a
+// saved view's are stored verbatim in its `columns` JSON. `ListHeaderItem`
+// renders `item.label` as-is, so none of them ever met the translation
+// dictionary — which is why the ticket list still said "Customer" long after
+// the Customer -> Department rename (setup/terminology.py) had done every label
+// that does go through `__()`.
+//
+// Translating here rather than at either source is deliberate: it is one place
+// instead of two, it covers every doctype and every saved view at once, and it
+// needs no data migration to rewrite labels already stored in HD View rows.
+//
+// `columns` itself is left alone on purpose. It is what gets posted back as
+// `defaultParams.columns` when a view is saved, and translating in place would
+// persist "Department" into the stored JSON — baking one site's language into
+// data that is supposed to be language-neutral.
+const displayColumns = computed(() =>
+  (columns.value || []).map((column) => ({
+    ...column,
+    label: column.label ? __(column.label) : column.label,
+  }))
+);
 
 function getGroupedByRows(listRows, groupByField) {
   let groupedRows = [];

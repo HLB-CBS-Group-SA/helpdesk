@@ -264,7 +264,9 @@ onMounted(() => {
 
 usePageMeta(() => {
   return {
-    title: `Customer: ${props.id}`,
+    // HLB-FORK: column-label-i18n — see Customers.vue. Built with a placeholder
+    // rather than interpolation so the whole sentence is one translatable key.
+    title: __("Customer: {0}", [props.id]),
   };
 });
 </script>
