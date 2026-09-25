@@ -292,17 +292,29 @@ const TYPE_EDITOR_HINTS: Record<string, string> = {
 };
 
 
-// The sub-type lives in a different Custom Field per ticket type, so look
-// through the ones that carry one rather than hardcoding a single fieldname.
-const SUBTYPE_FIELDS = [
-  "sr_category",
-  "oi_category",
-  "si_category",
-  "swr_category",
-  "pi_category",
-  "au_support_type",
-  "hr_subtype",
-];
+// HLB-FORK: request-spec — the sub-type lives in a different Custom Field per
+// ticket type. Read ONLY the one that belongs to the type currently selected:
+// a sub-type picked under a previous type stays in templateFields when the type
+// changes, and scanning every field let it keep driving the spec, the editor
+// hint and the optional body after the switch (#61 — "change the ticket type
+// and it doesn't always update"). Same map as company_helpdesk
+// setup/routing.py SUBTYPE_FIELD.
+const SUBTYPE_FIELD_OF_TYPE: Record<string, string> = {
+  "Service Request": "sr_category",
+  "Operational Incident": "oi_category",
+  "Security Incident": "si_category",
+  "Software Request": "swr_category",
+  "Project & Innovation Request": "pi_category",
+  "GITC & IT Audit Request": "au_support_type",
+  "HR Onboarding / Offboarding": "hr_subtype",
+  "Confidential Request": "cr_category",
+};
+
+const currentSubtype = computed<string>(() => {
+  const fields = templateFields as Record<string, string>;
+  const field = SUBTYPE_FIELD_OF_TYPE[fields["ticket_type"]];
+  return (field && fields[field]) || "";
+});
 
 // HLB-FORK: optional-body — sub-types where an empty body is a legitimate
 // answer. Upstream disables Submit whenever the editor is empty, which is right
@@ -313,19 +325,14 @@ const SUBTYPE_FIELDS = [
 // See customisations.manifest.json id=ui-optional-body.
 const OPTIONAL_BODY = new Set(["Offboarding"]);
 
-const bodyRequired = computed(() => {
-  const fields = templateFields as Record<string, string>;
-  return !SUBTYPE_FIELDS.some((fieldname) => OPTIONAL_BODY.has(fields[fieldname]));
-});
+const bodyRequired = computed(() => !OPTIONAL_BODY.has(currentSubtype.value));
 
 const editorHint = computed(() => {
   const fields = templateFields as Record<string, string>;
   // Sub-type first: it is the more specific answer, so a type-wide prompt never
   // masks one written for a particular sub-type.
-  for (const fieldname of SUBTYPE_FIELDS) {
-    const hint = EDITOR_HINTS[fields[fieldname]];
-    if (hint) return __(hint);
-  }
+  const hint = EDITOR_HINTS[currentSubtype.value];
+  if (hint) return __(hint);
   const typeHint = TYPE_EDITOR_HINTS[fields["ticket_type"]];
   if (typeHint) return __(typeHint);
   return __("Detailed explanation");
@@ -492,9 +499,7 @@ const requestSpec = computed<string[]>(() => {
   if (!selected) return [];
   // Sub-type first: it is the more specific answer, so a type-wide spec never
   // masks one written for a particular sub-type.
-  const override = SUBTYPE_FIELDS.map((f) => SUBTYPE_SPECS[fields[f]]).find(
-    Boolean
-  );
+  const override = SUBTYPE_SPECS[currentSubtype.value];
   const raw = override || ticketTypeResource.dataMap?.[selected]?.hlb_spec || "";
   return raw
     .split("\n")

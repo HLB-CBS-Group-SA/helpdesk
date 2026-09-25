@@ -712,19 +712,25 @@ class HDTicket(Document):
 
         reply_to_email = sender_email.email_id
         rendered_template: str | None = None
-        if self.via_customer_portal:
-            email_content = frappe.db.get_single_value(
-                "HD Settings", "reply_via_agent_email_content"
+        # HLB-FORK: reply-notice — the reply email template applies to EVERY
+        # ticket, not only portal-raised ones. HLB keeps the conversation on the
+        # ticket; the email is a notice with a link (company_helpdesk
+        # setup/reply_notice.py sets the template). Upstream sent the full reply
+        # body to email-raised tickets, which invites a second conversation in
+        # the mailbox. Every submitter here is an imported staff account with a
+        # portal login, so the link always works.
+        email_content = frappe.db.get_single_value(
+            "HD Settings", "reply_via_agent_email_content"
+        )
+        default_email_content = get_default_email_content("reply_via_agent")
+        try:
+            rendered_template = self._get_rendered_template(
+                email_content,
+                default_email_content,
+                {"message": message, "ticket_url": self.portal_uri},
             )
-            default_email_content = get_default_email_content("reply_via_agent")
-            try:
-                rendered_template = self._get_rendered_template(
-                    email_content,
-                    default_email_content,
-                    {"message": message, "ticket_url": self.portal_uri},
-                )
-            except Exception as e:
-                frappe.throw(_("Could not an email due to: {0}").format(e))
+        except Exception as e:
+            frappe.throw(_("Could not an email due to: {0}").format(e))
 
         send_delayed = True
         send_now = False

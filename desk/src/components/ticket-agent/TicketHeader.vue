@@ -128,6 +128,49 @@
       />
     </template>
   </Dialog>
+
+  <!-- HLB-FORK: delete-reason — the single-ticket Delete asks why, like the
+       list's bulk Delete does, and goes through the same endpoint. Upstream's
+       plain confirm called helpdesk.api.ticket.delete_ticket, which
+       company_helpdesk's on_trash guard refuses (no reason given); the refusal
+       then reached toast.error() as an Error object and rendered as an empty
+       bubble (#52). Offered to Super Admins only. -->
+  <Dialog
+    v-model="deleteDialog.show"
+    :options="{ title: __('Delete ticket #{0}', [ticket?.doc?.name]) }"
+  >
+    <template #body-content>
+      <p class="text-p-sm text-ink-gray-6 mb-3">
+        {{
+          __(
+            "This cannot be undone, so say why — the reason is kept after the ticket is gone."
+          )
+        }}
+      </p>
+      <FormControl
+        v-model="deleteDialog.reason"
+        type="textarea"
+        :label="__('Reason for deletion')"
+        :placeholder="__('e.g. Spam received by email / duplicate of #0123')"
+        :disabled="deleteDialog.loading"
+      />
+      <p v-if="deleteDialog.error" class="text-p-sm text-ink-red-3 mt-2">
+        {{ deleteDialog.error }}
+      </p>
+    </template>
+    <template #actions>
+      <Button
+        class="w-full"
+        variant="solid"
+        theme="red"
+        icon-left="trash-2"
+        :loading="deleteDialog.loading"
+        :disabled="deleteDialog.reason.trim().length < 5"
+        :label="__('Delete')"
+        @click="confirmDelete"
+      />
+    </template>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -138,7 +181,6 @@ import { setupCustomizations } from "@/composables/formCustomisation";
 import { useNotifyTicketUpdate } from "@/composables/realtime";
 import { useShortcut } from "@/composables/shortcuts";
 import { useView } from "@/composables/useView";
-import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
@@ -179,7 +221,6 @@ import { IndicatorIcon } from "../icons";
 import TicketNavigation from "./TicketNavigation.vue";
 import TicketSLA from "./TicketSLA.vue";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
-const { isAdmin } = useAuthStore();
 const { $dialog } = globalStore();
 
 defineProps({
@@ -238,8 +279,7 @@ function confirmCancel() {
         cancelContext.reload();
       },
       onError(error: any) {
-        cancelDialog.error =
-          error?.messages?.[0] || error?.message || __("Could not cancel.");
+        cancelDialog.error = errorText(error, __("Could not cancel."));
       },
     }
   );
@@ -317,34 +357,52 @@ function updateField(fieldname: string, value: string, callback = () => {}) {
   callback();
 }
 
+// HLB-FORK: delete-reason — see the dialog in the template.
+const deleteDialog = reactive({
+  show: false,
+  reason: "",
+  error: "",
+  loading: false,
+});
+
 function handleDeleteTicket() {
-  $dialog({
-    title: __(`Delete ticket #${ticket?.value?.name}`),
-    message: __(
-      "Are you sure you want to delete this ticket? This is an irreversible action and cannot be undone."
-    ),
-    actions: [
-      {
-        label: __("Delete"),
-        theme: "red",
-        iconLeft: "trash-2",
-        variant: "solid",
-        onClick({ close }) {
-          call("helpdesk.api.ticket.delete_ticket", {
-            name: ticket?.value?.doc.name,
-          })
-            .then(() => {
-              toast.success(__("Ticket deleted successfully."));
-              router.push({ name: "TicketsAgent" });
-            })
-            .catch((err: any) => {
-              toast.error(err || __("Failed to delete ticket."));
-            });
-          close();
-        },
-      },
-    ],
-  });
+  deleteDialog.reason = "";
+  deleteDialog.error = "";
+  deleteDialog.loading = false;
+  deleteDialog.show = true;
+}
+
+function errorText(error: any, fallback: string): string {
+  // frappe-ui rejects with an Error whose server message sits in `messages`;
+  // never hand the object itself to a toast or a template.
+  return error?.messages?.[0] || error?.message || fallback;
+}
+
+function confirmDelete() {
+  const reason = deleteDialog.reason.trim();
+  if (reason.length < 5) return;
+  deleteDialog.loading = true;
+  deleteDialog.error = "";
+  call("company_helpdesk.setup.deletion.delete_with_reason", {
+    tickets: JSON.stringify([ticket?.value?.doc.name]),
+    reason,
+  })
+    .then((result: { deleted: string[]; failed: { error: string }[] }) => {
+      if (result?.deleted?.length) {
+        deleteDialog.show = false;
+        toast.success(__("Ticket deleted."));
+        router.push({ name: "TicketsAgent" });
+        return;
+      }
+      deleteDialog.error =
+        result?.failed?.[0]?.error || __("Could not delete the ticket.");
+    })
+    .catch((error: any) => {
+      deleteDialog.error = errorText(error, __("Could not delete the ticket."));
+    })
+    .finally(() => {
+      deleteDialog.loading = false;
+    });
 }
 
 const ticketCount = createResource({
@@ -388,7 +446,8 @@ const defaultActions = computed(() => {
 });
 
 const deleteAction = computed(() => {
-  if (!isAdmin) return [];
+  // HLB-FORK: delete-reason — Super Admins only (#52), as the server decides.
+  if (!cancelContext.data?.can_delete) return [];
   return [
     {
       group: __("Default actions"),

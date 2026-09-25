@@ -310,16 +310,24 @@ const defaultOptions = reactive({
           ],
         });
       },
-      // HLB-FORK: delete-reason — any agent may delete a ticket, because the
-      // reason dialog is what makes a delete accountable, not the rank of the
-      // person pressing the button. Every OTHER doctype keeps upstream's
-      // manager-only gate: deleting an Agent or a Team is a different kind of
-      // act and is not what this change is about.
+      // HLB-FORK: delete-reason — tickets are deleted by Super Admins only
+      // (#52; company_helpdesk asks setup/deletion.can_delete). Everybody else
+      // cancels, which keeps the record. Every OTHER doctype keeps upstream's
+      // manager-only gate.
       condition: () =>
         !options.value.isCustomerPortal &&
-        (isManager || options.value.doctype === "HD Ticket"),
+        (options.value.doctype === "HD Ticket"
+          ? Boolean(canDeleteTickets.data)
+          : isManager),
     },
   ],
+});
+
+// HLB-FORK: delete-reason — may this person delete tickets at all? Asked of
+// the server so the banner and the rule that enforces it cannot disagree.
+const canDeleteTickets = createResource({
+  url: "company_helpdesk.api.can_delete_tickets",
+  auto: props.options.doctype === "HD Ticket" && !props.options.isCustomerPortal,
 });
 
 // HLB-FORK: delete-reason — state + handler for the ticket delete dialog above.
@@ -369,8 +377,9 @@ function confirmTicketDelete() {
       deleteReason.show = false;
       reload();
     })
-    .catch((error: Error) => {
-      deleteReason.error = error?.message || __("Could not delete.");
+    .catch((error: any) => {
+      deleteReason.error =
+        error?.messages?.[0] || error?.message || __("Could not delete.");
     })
     .finally(() => {
       deleteReason.loading = false;

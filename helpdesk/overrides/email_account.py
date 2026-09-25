@@ -56,6 +56,21 @@ class CustomInboundMail(InboundMail):
         return self._parent_communication
 
 
+def _skip_inbound(message) -> bool:
+    # HLB-FORK: auto-reply-filter — see get_inbound_mails.
+    for path in frappe.get_hooks("helpdesk_skip_inbound_mail"):
+        try:
+            if frappe.get_attr(path)(message):
+                return True
+        except Exception:
+            # A broken filter must never stop mail being fetched.
+            frappe.log_error(
+                title=_("Inbound mail filter {0} failed").format(path),
+                message=frappe.get_traceback(),
+            )
+    return False
+
+
 class CustomEmailAccount(EmailAccount):
     def get_inbound_mails(self) -> list[InboundMail]:
         """retrive and return inbound mails."""
@@ -70,6 +85,15 @@ class CustomEmailAccount(EmailAccount):
 
                     # Important: If the email is auto-generated, we do not create a ticket
                     if _msg.get("X-Auto-Generated"):
+                        continue
+
+                    # HLB-FORK: auto-reply-filter — X-Auto-Generated above is a
+                    # Lotus Notes header Outlook never sends, so out-of-office
+                    # replies still became tickets. Apps decide what else counts
+                    # as automatic via the `helpdesk_skip_inbound_mail` hook
+                    # (company_helpdesk mail_filter.skip_inbound); any True skips
+                    # the message before a Communication or ticket exists.
+                    if _skip_inbound(_msg):
                         continue
 
                     uid = (
