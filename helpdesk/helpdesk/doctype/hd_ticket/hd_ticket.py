@@ -1005,6 +1005,11 @@ class HDTicket(Document):
     # is an external dependency. Refer `communication.py` of Frappe framework for more.
     # Since this is called from communication itself, `c` is the communication doc.
     def on_communication_update(self, c):
+        # HLB-FORK: merge-keeps-status — history copied in by merge_ticket is
+        # not a new message, so it must not reopen or re-stamp this ticket.
+        if frappe.flags.hd_merge_target == self.name:
+            return
+
         # A reply to a merged ticket belongs to its merge target; redirect it there. If no
         # safe target resolves (cycle/dead-end), fall through and handle it here so the
         # reply isn't dropped.

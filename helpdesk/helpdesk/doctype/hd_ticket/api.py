@@ -340,6 +340,13 @@ def merge_ticket(source: str, target: str):
 
     controller = get_controller("HD Ticket")
 
+    # HLB-FORK: merge-keeps-status — the copies below are history, not new
+    # messages. Without this flag each copied inbound email runs the target's
+    # on_communication_update, which reopens it onto the default open status
+    # ("Unassigned" here) and bumps last_customer_response. frappe.flags is
+    # per request, so a failure part-way cannot leave it set.
+    frappe.flags.hd_merge_target = target
+
     source_comments = frappe.db.get_list(
         "HD Ticket Comment", filters={"reference_ticket": source}, pluck="name"
     )
@@ -362,6 +369,7 @@ def merge_ticket(source: str, target: str):
         pluck="name",
     )
     duplicate_list_retain_timestamp("File", source_attachments, target, controller)
+    frappe.flags.hd_merge_target = None
 
     doc = frappe.get_doc("HD Ticket", source)
 

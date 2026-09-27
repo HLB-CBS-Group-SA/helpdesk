@@ -378,10 +378,39 @@ def get_filterable_fields(
     return res
 
 
+# HLB-FORK: sort-fields
+UNSORTABLE_TYPES = {"Text Editor", "Long Text", "Text", "Small Text", "Attach", "Time"}
+UNSORTABLE_FIELDS = {
+    "content_type",
+    "email_account",
+    "is_merged",
+    "key",
+    "merged_with",
+    "template",
+    "ticket_split_from",
+    "via_customer_portal",
+    "raised_outside_working_hours",
+}
+
+
+def is_sortable_field(field) -> bool:
+    return not (
+        field.fieldtype in no_value_fields
+        or field.fieldtype in UNSORTABLE_TYPES
+        or field.hidden
+        or field.depends_on
+        or field.fieldname in UNSORTABLE_FIELDS
+    )
+
+
 @frappe.whitelist()
 def sort_options(doctype: str, show_customer_portal_fields: bool = False):
     fields = frappe.get_meta(doctype).fields
-    fields = [field for field in fields if field.fieldtype not in no_value_fields]
+    # HLB-FORK: sort-fields — only fields a list can sensibly sort on, A to Z.
+    # Upstream offered every field, which here means six fields called
+    # "Sub-type" and the rest of each ticket type's intake form (those carry a
+    # depends_on), long text, and internal plumbing, in no order.
+    fields = [field for field in fields if is_sortable_field(field)]
     fields = [
         {
             "label": field.label,
@@ -401,8 +430,14 @@ def sort_options(doctype: str, show_customer_portal_fields: bool = False):
         {"label": "Modified By", "value": "modified_by"},
         {"label": "Owner", "value": "owner"},
     ]
+    # HLB-FORK: sort-fields — the list can show "Assigned to" as a column, but
+    # upstream never offered it as a sort. `_assign` is a real column.
+    if doctype == "HD Ticket" and not show_customer_portal_fields:
+        standard_fields.append({"label": "Assigned to", "value": "_assign"})
 
     fields.extend(standard_fields)
+    fields = [{**f, "label": _(f["label"])} for f in fields]
+    fields.sort(key=lambda f: f["label"].lower())
 
     return fields
 
