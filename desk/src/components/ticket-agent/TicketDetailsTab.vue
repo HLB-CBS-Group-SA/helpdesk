@@ -43,6 +43,12 @@
       class="border-t flex-1 min-h-0 overflow-y-auto divide-y-[1px]"
       v-if="Boolean(customFields.length) || showRecentSimilarTickets"
     >
+      <!-- HLB-FORK: procurement-signature — the Procurement Request's flow. -->
+      <ProcurementPanel
+        v-if="ticket.doc?.ticket_type === 'Procurement Request'"
+        :ticket-id="ticket.doc.name"
+        @changed="onProcurementChanged"
+      />
       <!-- Ticket Info (custom fields) -->
       <div v-if="Boolean(customFields.length)">
         <Section label="Ticket Info" v-model:opened="openedSections.ticketInfo">
@@ -166,6 +172,7 @@ import LucideChevronRight from "~icons/lucide/chevron-right";
 import Section from "../Section.vue";
 import TicketField from "../TicketField.vue";
 import AssignTo from "./AssignTo.vue";
+import ProcurementPanel from "./ProcurementPanel.vue";
 import TicketContact from "./TicketContact.vue";
 
 const ticket = inject(TicketSymbol)!;
@@ -173,6 +180,14 @@ const assignees = inject(AssigneeSymbol)!;
 const customizations = inject(CustomizationSymbol)!;
 const activities = inject(ActivitiesSymbol)!;
 const recentSimilarTickets = inject(RecentSimilarTicketsSymbol)!;
+
+// HLB-FORK: procurement-signature — a step moves the status, the stage and the
+// assignee, so everything showing them is fetched again.
+function onProcurementChanged() {
+  ticket.value.reload();
+  assignees.value.reload();
+  activities.value.reload();
+}
 const { getFields, getField } = getMeta("HD Ticket");
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
 
