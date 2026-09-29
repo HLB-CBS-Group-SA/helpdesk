@@ -2,14 +2,15 @@
 #
 # Upstream's version of this file triggers on `push: tags: ["*"]` and publishes to
 # `ghcr.io/${{ github.repository }}`. In this fork that expands to
-# `ghcr.io/jn-co-hlb/helpdesk` — the SAME GHCR package the deploy repo
-# (jn-co-hlb/HLB-CBS-Helpdesk-Deploy) builds our production image into.
+# `ghcr.io/hlb-cbs-group-sa/helpdesk` — the SAME GHCR package the deploy repo
+# (HLB-CBS-Group-SA/HLB-CBS-Helpdesk-Deploy) builds our production image into.
+# (Before the 2026-09 move to the organisation, both were under `jn-co-hlb`.)
 #
 # Our fork release process pushes a tag on every fork change
 # (`hlb-v<upstream>-<n>`, see DEPENDENCIES.md), so upstream's workflow fired on
 # exactly the action we perform most, and published:
 #
-#     ghcr.io/jn-co-hlb/helpdesk:hlb-v1.28.1-2   <- github.ref_name
+#     ghcr.io/jn-co-hlb/helpdesk:hlb-v1.28.1-2   <- github.ref_name (then)
 #     ghcr.io/jn-co-hlb/helpdesk:stable
 #
 # built from `FRAPPE_BRANCH=version-15` and UPSTREAM `frappe/helpdesk@main`, with
@@ -22,7 +23,7 @@
 # upstream tag. The durable fix is repo Settings -> Actions -> General ->
 # "Disable actions" on this fork; this file is defence in depth.
 #
-# Our images are built ONLY by jn-co-hlb/HLB-CBS-Helpdesk-Deploy
+# Our images are built ONLY by HLB-CBS-Group-SA/HLB-CBS-Helpdesk-Deploy
 # (.github/workflows/build-and-deploy.yml), which pins frappe, the fork tag,
 # wiki and company_helpdesk via apps.json.
 
@@ -38,4 +39,4 @@ jobs:
       - name: Explain
         run: |
           echo "Disabled in the HLB fork — see the comment at the top of this file."
-          echo "Production images are built by jn-co-hlb/HLB-CBS-Helpdesk-Deploy."
+          echo "Production images are built by HLB-CBS-Group-SA/HLB-CBS-Helpdesk-Deploy."
