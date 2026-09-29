@@ -126,6 +126,12 @@ const portalRoutes = [
     name: "Dashboard",
     component: () => import("@/pages/dashboard/Dashboard.vue"),
   },
+  // HLB-FORK: my-board — the tickets assigned to me, as a Kanban board (#57).
+  {
+    path: "/board",
+    name: "MyBoard",
+    component: () => import("@/pages/board/MyBoard.vue"),
+  },
   {
     path: "/call-logs",
     name: "CallLogs",

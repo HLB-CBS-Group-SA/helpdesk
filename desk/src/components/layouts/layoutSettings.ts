@@ -5,6 +5,7 @@ import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import { OrganizationsIcon } from "../icons";
 import PhoneIcon from "../icons/PhoneIcon.vue";
 import LucideHome from "~icons/lucide/home";
+import LucideKanban from "~icons/lucide/kanban";
 import { __ } from "@/translation";
 
 export const agentPortalSidebarOptions = [
@@ -22,6 +23,12 @@ export const agentPortalSidebarOptions = [
     label: __("Tickets"),
     icon: LucideTicket,
     to: "TicketsAgent",
+  },
+  // HLB-FORK: my-board — the tickets assigned to me, as a Kanban board (#57).
+  {
+    label: __("My board"),
+    icon: LucideKanban,
+    to: "MyBoard",
   },
   {
     label: __("Knowledge Base"),
