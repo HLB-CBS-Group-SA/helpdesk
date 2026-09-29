@@ -170,6 +170,18 @@ const portalRoutes = [
       auth: true,
     },
   },
+  // HLB-FORK: procurement-signature — the Director's signing page. Public
+  // (the portal shell) and signed-in: the Director is usually not an agent.
+  {
+    path: "/sign/:ticketId",
+    name: "ProcurementSign",
+    component: () => import("@/pages/procurement/ProcurementSign.vue"),
+    props: true,
+    meta: {
+      public: true,
+      auth: true,
+    },
+  },
   {
     path: "/kb-public",
     name: "CustomerKnowledgeBase",
