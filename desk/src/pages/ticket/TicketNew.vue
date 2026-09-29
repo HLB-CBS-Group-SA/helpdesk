@@ -25,7 +25,7 @@
         v-if="Boolean(visibleFields)"
       >
         <UniInput
-          v-for="field in visibleFields"
+          v-for="field in genericFields"
           :key="field.fieldname"
           :field="field"
           :value="templateFields[field.fieldname]"
@@ -68,6 +68,14 @@
       >
         {{ ticketTypeNotice }}
       </div>
+      <!-- HLB-FORK: procurement-form — the expenditure requisition draws its
+           own pr_* fields, laid out as the paper form. -->
+      <ProcurementForm
+        v-if="isProcurement"
+        v-model:files="procurementFiles"
+        :doc="templateFields"
+        :fields="visibleFields"
+      />
       <!-- existing fields -->
       <div
         class="flex flex-col"
@@ -221,6 +229,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import SearchArticles from "../../components/SearchArticles.vue";
+import ProcurementForm from "../../components/ticket/ProcurementForm.vue";
 const TicketTextEditor = defineAsyncComponent(
   () => import("./TicketTextEditor.vue")
 );
@@ -243,6 +252,22 @@ const subject = ref("");
 const description = ref("");
 const attachments = ref([]);
 const templateFields = reactive({});
+
+// HLB-FORK: procurement-form — the Procurement Request is the expenditure
+// requisition form (company_helpdesk #52). Its fields (all named pr_*) are
+// drawn by ProcurementForm, in the paper form's sections and with its input
+// behaviour (amount and phone masks, text areas, live VAT, uploads), rather
+// than one by one in the generic grid. Validation is unchanged: they are still
+// template fields, so a required one that is showing still blocks Submit.
+// Section E is its own field there, so the body is optional for this type.
+// See customisations.manifest.json id=ui-procurement-form.
+const PROCUREMENT_TYPE = "Procurement Request";
+const isProcurement = computed(
+  () =>
+    (templateFields as Record<string, string>)["ticket_type"] ===
+    PROCUREMENT_TYPE
+);
+const procurementFiles = ref([]);
 
 // HLB-FORK: subject-per-type — let a ticket type rename Subject.
 //
@@ -287,6 +312,9 @@ const TYPE_EDITOR_HINTS: Record<string, string> = {
     "Please describe the issue in detail, including what you were busy with at the time and what you saw on screen. Paste or attach screenshots and any supporting documentation.",
   "Security Incident":
     "Please supply as much detail as possible, including but not limited to what preceded the incident and what has already been done in response to it.",
+  // HLB-FORK: procurement-form — the form carries the request; the body is extra.
+  "Procurement Request":
+    "Anything else Practice Management should know (optional).",
   "Project & Innovation Request":
     "Please describe the problem or opportunity, how this is done today, the outcome you want and how you would measure success, the systems and data involved, the expected benefit, and any indicative budget.",
 };
@@ -325,7 +353,9 @@ const currentSubtype = computed<string>(() => {
 // See customisations.manifest.json id=ui-optional-body.
 const OPTIONAL_BODY = new Set(["Offboarding"]);
 
-const bodyRequired = computed(() => !OPTIONAL_BODY.has(currentSubtype.value));
+const bodyRequired = computed(
+  () => !OPTIONAL_BODY.has(currentSubtype.value) && !isProcurement.value
+);
 
 const editorHint = computed(() => {
   const fields = templateFields as Record<string, string>;
@@ -351,6 +381,11 @@ const SUBJECT_OVERRIDES: Record<string, { label: string; placeholder: string }> 
     "GITC & IT Audit Request": {
       label: "Client Name",
       placeholder: "The client this audit work is for.",
+    },
+    // HLB-FORK: procurement-form
+    "Procurement Request": {
+      label: "Request title",
+      placeholder: "What is being bought, and from whom.",
     },
   };
 
@@ -537,6 +572,11 @@ const visibleFields = computed(() => {
   return _fields.map((field) => parseField(field, templateFields));
 });
 
+// HLB-FORK: procurement-form — the pr_* fields belong to ProcurementForm.
+const genericFields = computed(() =>
+  visibleFields.value.filter((f) => !f.fieldname.startsWith("pr_"))
+);
+
 function handleOnFieldChange(e: any, fieldname: string, fieldtype: string) {
   templateFields[fieldname] = e.value;
   const fieldDependentFns = customOnChange.value?.[fieldname];
@@ -558,7 +598,9 @@ const ticket = createResource({
       template: props.templateId,
       ...templateFields,
     },
-    attachments: attachments.value,
+    // HLB-FORK: procurement-form — the quotations and the Director's signed
+    // approval are uploaded by the form and attached like any other file.
+    attachments: [...attachments.value, ...procurementFiles.value],
   }),
   // HLB-FORK: validate-visible — only demand what the form actually drew.
   //
