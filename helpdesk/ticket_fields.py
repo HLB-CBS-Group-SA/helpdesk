@@ -14,6 +14,9 @@ from helpdesk.utils import is_agent
 AGENT_WORKFLOW_FIELDS = {"_assign", "_liked_by", "_user_tags"}
 # only these reach the client; visible_to and editable_after_creation stay on the server
 CLIENT_COLUMNS = ("fieldname", "required", "placeholder", "url_method")
+# HLB-FORK: multi-select — company_helpdesk's Custom Field on the template row;
+# without it the form renders a multi-select field single-choice.
+HLB_ROW_COLUMNS = ("hlb_multiple",)
 
 
 class TicketFields:
@@ -68,7 +71,9 @@ class TicketFields:
         )
 
     def get_client_field(self, row: frappe._dict) -> frappe._dict:
-        return frappe._dict({column: row[column] for column in CLIENT_COLUMNS})
+        return frappe._dict(
+            {column: row.get(column) for column in CLIENT_COLUMNS + HLB_ROW_COLUMNS}
+        )
 
     @cached_property
     def visible_template_rows(self) -> list[frappe._dict]:
@@ -113,6 +118,12 @@ class TicketFields:
                 "required",
                 "placeholder",
                 "url_method",
+                # HLB-FORK: multi-select — only once the Custom Field exists
+                *(
+                    column
+                    for column in HLB_ROW_COLUMNS
+                    if frappe.get_meta("HD Ticket Template Field").has_field(column)
+                ),
             ],
             order_by="idx",
         )

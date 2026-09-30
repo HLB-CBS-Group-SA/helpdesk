@@ -126,6 +126,12 @@ const portalRoutes = [
     name: "Dashboard",
     component: () => import("@/pages/dashboard/Dashboard.vue"),
   },
+  // HLB-FORK: my-board — the tickets assigned to me, as a Kanban board (#57).
+  {
+    path: "/board",
+    name: "MyBoard",
+    component: () => import("@/pages/board/MyBoard.vue"),
+  },
   {
     path: "/call-logs",
     name: "CallLogs",
@@ -160,6 +166,18 @@ const portalRoutes = [
     meta: {
       onSuccessRoute: "TicketCustomer",
       parent: "TicketsCustomer",
+      public: true,
+      auth: true,
+    },
+  },
+  // HLB-FORK: procurement-signature — the Director's signing page. Public
+  // (the portal shell) and signed-in: the Director is usually not an agent.
+  {
+    path: "/sign/:ticketId",
+    name: "ProcurementSign",
+    component: () => import("@/pages/procurement/ProcurementSign.vue"),
+    props: true,
+    meta: {
       public: true,
       auth: true,
     },

@@ -1,6 +1,8 @@
 export { default as BackButton } from "./BackButton.vue";
 export { default as AttachmentItem } from "./AttachmentItem.vue";
 export { default as AttachmentList } from "./AttachmentList.vue";
+// HLB-FORK: multi-select — see MultiSelect.vue
+export { default as MultiSelect } from "./MultiSelect.vue";
 export { default as CommentTextEditor } from "./CommentTextEditor.vue";
 export { default as CommunicationArea } from "./CommunicationArea.vue";
 export { default as EmailEditor } from "./EmailEditor.vue";
