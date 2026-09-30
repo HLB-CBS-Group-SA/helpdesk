@@ -253,6 +253,8 @@ export interface Field {
   required: 0 | 1;
   description?: null;
   url_method?: string;
+  // HLB-FORK: multi-select — set on the HD Ticket Template Field row.
+  hlb_multiple?: number;
   link_filters?: string;
   filters?: string;
   display_via_depends_on?: string;

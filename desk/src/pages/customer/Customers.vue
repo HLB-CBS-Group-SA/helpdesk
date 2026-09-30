@@ -83,7 +83,9 @@ const options = computed(() => {
 
 usePageMeta(() => {
   return {
-    title: "Customers",
+    // HLB-FORK: column-label-i18n — the browser tab title, through `__()` so the
+    // Customer -> Department rename reaches it like every other label.
+    title: __("Customers"),
   };
 });
 </script>

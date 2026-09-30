@@ -74,6 +74,102 @@
     @update="ticket.reload()"
   />
   <TicketSubjectModal v-model="showSubjectDialog" />
+
+  <!-- HLB-FORK: cancel-reason — cancelling asks why, in the same step.
+       company_helpdesk refuses to cancel a ticket without a reason
+       (ticket.validate_cancellation), and the ticket's own "Reason for
+       cancellation" field only renders once the status already IS Cancelled.
+       With the status menu sending the status alone, the server refused the
+       save and the field never appeared: cancelling looked impossible.
+       So the reason is collected here and sent WITH the status.
+       Only offered to people who may cancel (Super Admins, or the approving
+       team on a request waiting on it, where it reads as Decline).
+       See customisations.manifest.json id=ui-cancel-reason. -->
+  <Dialog
+    v-model="cancelDialog.show"
+    :options="{
+      title: cancelDialog.declining
+        ? __('Decline request')
+        : __('Cancel ticket'),
+    }"
+  >
+    <template #body-content>
+      <p class="text-p-sm text-ink-gray-6 mb-3">
+        {{
+          cancelDialog.declining
+            ? __(
+                "The request is declined and cancelled, and the person who raised it is told why."
+              )
+            : __(
+                "The ticket is cancelled, and the person who raised it is told why."
+              )
+        }}
+      </p>
+      <FormControl
+        v-model="cancelDialog.reason"
+        type="textarea"
+        :label="__('Reason')"
+        :disabled="ticket.setValue.loading"
+      />
+      <p v-if="cancelDialog.error" class="text-p-sm text-ink-red-3 mt-2">
+        {{ cancelDialog.error }}
+      </p>
+    </template>
+    <template #actions>
+      <Button
+        class="w-full"
+        variant="solid"
+        theme="red"
+        :loading="ticket.setValue.loading"
+        :disabled="!cancelDialog.reason.trim()"
+        :label="cancelDialog.declining ? __('Decline') : __('Cancel ticket')"
+        @click="confirmCancel"
+      />
+    </template>
+  </Dialog>
+
+  <!-- HLB-FORK: delete-reason — the single-ticket Delete asks why, like the
+       list's bulk Delete does, and goes through the same endpoint. Upstream's
+       plain confirm called helpdesk.api.ticket.delete_ticket, which
+       company_helpdesk's on_trash guard refuses (no reason given); the refusal
+       then reached toast.error() as an Error object and rendered as an empty
+       bubble (#52). Offered to Super Admins only. -->
+  <Dialog
+    v-model="deleteDialog.show"
+    :options="{ title: __('Delete ticket #{0}', [ticket?.doc?.name]) }"
+  >
+    <template #body-content>
+      <p class="text-p-sm text-ink-gray-6 mb-3">
+        {{
+          __(
+            "This cannot be undone, so say why — the reason is kept after the ticket is gone."
+          )
+        }}
+      </p>
+      <FormControl
+        v-model="deleteDialog.reason"
+        type="textarea"
+        :label="__('Reason for deletion')"
+        :placeholder="__('e.g. Spam received by email / duplicate of #0123')"
+        :disabled="deleteDialog.loading"
+      />
+      <p v-if="deleteDialog.error" class="text-p-sm text-ink-red-3 mt-2">
+        {{ deleteDialog.error }}
+      </p>
+    </template>
+    <template #actions>
+      <Button
+        class="w-full"
+        variant="solid"
+        theme="red"
+        icon-left="trash-2"
+        :loading="deleteDialog.loading"
+        :disabled="deleteDialog.reason.trim().length < 5"
+        :label="__('Delete')"
+        @click="confirmDelete"
+      />
+    </template>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -85,7 +181,6 @@ import { setupCustomizations } from "@/composables/formCustomisation";
 import { useNotifyTicketUpdate } from "@/composables/realtime";
 import { useShortcut } from "@/composables/shortcuts";
 import { useView } from "@/composables/useView";
-import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
@@ -102,7 +197,10 @@ import {
   Button,
   call,
   createResource,
+  // HLB-FORK: cancel-reason
+  Dialog,
   Dropdown,
+  FormControl,
   toast,
 } from "frappe-ui";
 import {
@@ -112,6 +210,7 @@ import {
   inject,
   onMounted,
   PropType,
+  reactive,
   ref,
   useTemplateRef,
   watchEffect,
@@ -120,7 +219,6 @@ import { useRoute, useRouter } from "vue-router";
 import LucideMerge from "~icons/lucide/merge";
 import { IndicatorIcon } from "../icons";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
-const { isAdmin } = useAuthStore();
 const { $dialog } = globalStore();
 
 defineProps({
@@ -141,13 +239,76 @@ const activities = inject(ActivitiesSymbol)!;
 const showSubjectDialog = ref(false);
 
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
+
+// HLB-FORK: cancel-reason — may this person cancel, and is it a decline?
+// Asked of the server rather than worked out here, so the menu and the rule
+// that enforces it cannot disagree.
+const CANCELLED = "Cancelled";
+const cancelContext = createResource({
+  url: "company_helpdesk.api.cancel_context",
+  makeParams: () => ({ ticket: ticket.value?.name }),
+  auto: true,
+});
+const cancelDialog = reactive({
+  show: false,
+  reason: "",
+  error: "",
+  declining: false,
+});
+
+function openCancelDialog() {
+  cancelDialog.reason = "";
+  cancelDialog.error = "";
+  cancelDialog.declining = Boolean(cancelContext.data?.declining);
+  cancelDialog.show = true;
+}
+
+function confirmCancel() {
+  const reason = cancelDialog.reason.trim();
+  if (!reason) return;
+  cancelDialog.error = "";
+  notifyTicketUpdate("Status", CANCELLED);
+  ticket.value.setValue.submit(
+    { status: CANCELLED, cancel_reason: reason },
+    {
+      onSuccess() {
+        cancelDialog.show = false;
+        activities.value.reload();
+        cancelContext.reload();
+      },
+      onError(error: any) {
+        cancelDialog.error = errorText(error, __("Could not cancel."));
+      },
+    }
+  );
+}
+
 const statusDropdown = computed(() => {
   const statuses =
-    ticketStatusStore.statuses.data?.filter((s) => s.enabled) || [];
+    ticketStatusStore.statuses.data
+      ?.filter((s) => s.enabled)
+      // HLB-FORK: cancel-reason — not offered to people who would be refused.
+      .filter(
+        (s) =>
+          s.label_agent !== CANCELLED ||
+          ticket.value.doc.status === CANCELLED ||
+          cancelContext.data?.allowed
+      ) || [];
   return statuses.map((o: HDTicketStatus) => ({
-    label: __(o.label_agent),
+    label:
+      o.label_agent === CANCELLED && cancelContext.data?.declining
+        ? __("Decline (Cancelled)")
+        : __(o.label_agent),
     value: o.label_agent,
     onClick: () => {
+      // HLB-FORK: cancel-reason — Cancelled goes through the reason dialog.
+      if (
+        o.label_agent === CANCELLED &&
+        ticket.value.doc.status !== CANCELLED
+      ) {
+        openCancelDialog();
+        return;
+      }
       notifyTicketUpdate("Status", o.label_agent);
       if (ticket.value.doc.status === o.label_agent) return;
       ticket.value.setValue.submit(
@@ -155,6 +316,9 @@ const statusDropdown = computed(() => {
         {
           onSuccess() {
             activities.value.reload();
+            // HLB-FORK: cancel-reason — leaving Pending approval changes
+            // whether this person may still cancel, and how it is worded.
+            cancelContext.reload();
           },
         }
       );
@@ -194,34 +358,52 @@ function updateField(fieldname: string, value: string, callback = () => {}) {
   callback();
 }
 
+// HLB-FORK: delete-reason — see the dialog in the template.
+const deleteDialog = reactive({
+  show: false,
+  reason: "",
+  error: "",
+  loading: false,
+});
+
 function handleDeleteTicket() {
-  $dialog({
-    title: __(`Delete ticket #${ticket?.value?.name}`),
-    message: __(
-      "Are you sure you want to delete this ticket? This is an irreversible action and cannot be undone."
-    ),
-    actions: [
-      {
-        label: __("Delete"),
-        theme: "red",
-        iconLeft: "trash-2",
-        variant: "solid",
-        onClick({ close }) {
-          call("helpdesk.api.ticket.delete_ticket", {
-            name: ticket?.value?.doc.name,
-          })
-            .then(() => {
-              toast.success(__("Ticket deleted successfully."));
-              router.push({ name: "TicketsAgent" });
-            })
-            .catch((err: any) => {
-              toast.error(err || __("Failed to delete ticket."));
-            });
-          close();
-        },
-      },
-    ],
-  });
+  deleteDialog.reason = "";
+  deleteDialog.error = "";
+  deleteDialog.loading = false;
+  deleteDialog.show = true;
+}
+
+function errorText(error: any, fallback: string): string {
+  // frappe-ui rejects with an Error whose server message sits in `messages`;
+  // never hand the object itself to a toast or a template.
+  return error?.messages?.[0] || error?.message || fallback;
+}
+
+function confirmDelete() {
+  const reason = deleteDialog.reason.trim();
+  if (reason.length < 5) return;
+  deleteDialog.loading = true;
+  deleteDialog.error = "";
+  call("company_helpdesk.setup.deletion.delete_with_reason", {
+    tickets: JSON.stringify([ticket?.value?.doc.name]),
+    reason,
+  })
+    .then((result: { deleted: string[]; failed: { error: string }[] }) => {
+      if (result?.deleted?.length) {
+        deleteDialog.show = false;
+        toast.success(__("Ticket deleted."));
+        router.push({ name: "TicketsAgent" });
+        return;
+      }
+      deleteDialog.error =
+        result?.failed?.[0]?.error || __("Could not delete the ticket.");
+    })
+    .catch((error: any) => {
+      deleteDialog.error = errorText(error, __("Could not delete the ticket."));
+    })
+    .finally(() => {
+      deleteDialog.loading = false;
+    });
 }
 
 const ticketCount = createResource({
@@ -264,7 +446,8 @@ const defaultActions = computed(() => {
 });
 
 const deleteAction = computed(() => {
-  if (!isAdmin) return [];
+  // HLB-FORK: delete-reason — Super Admins only (#52), as the server decides.
+  if (!cancelContext.data?.can_delete) return [];
   return [
     {
       group: __("Default actions"),

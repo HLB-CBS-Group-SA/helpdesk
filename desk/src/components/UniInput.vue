@@ -1,7 +1,14 @@
 <template>
   <div class="space-y-1.5" v-if="field.display_via_depends_on">
+    <!-- HLB-FORK: label-i18n — run the field label through __().
+         Upstream renders it raw, so the Customer -> Department rename (which
+         is ~20 Translation rows rather than a patch across 14 files, see
+         company_helpdesk/setup/terminology.py) reached every other surface and
+         stopped dead at the one place submitters actually look: the intake
+         form's own field labels.
+         See customisations.manifest.json id=ui-label-i18n. -->
     <span class="block text-sm text-ink-gray-7">
-      {{ field.label }}
+      {{ __(field.label) }}
       <span v-if="field.required" class="place-self-center text-ink-red-6">
         *
       </span>
@@ -28,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { Autocomplete, Link } from "@/components";
+import { Autocomplete, Link, MultiSelect } from "@/components";
 import { APIOptions, Field } from "@/types";
 import { parseApiOptions } from "@/utils";
 import {
@@ -59,7 +66,23 @@ const props = defineProps<P>();
 const emit = defineEmits<E>();
 
 const component = computed(() => {
-  if (props.field.url_method) {
+  // HLB-FORK: multi-select — checked FIRST so it wins for a field that also has
+  // a url_method: the distribution-list picker is both live-loaded AND
+  // multi-valued, and the url_method branch below would otherwise claim it and
+  // render a single-choice control.
+  // See customisations.manifest.json id=ui-multi-select.
+  if (props.field.hlb_multiple) {
+    return h(MultiSelect, {
+      options: props.field.url_method
+        ? apiOptions.data
+        : props.field.options
+        ? props.field.options
+            .split("\n")
+            .filter(Boolean)
+            .map((o) => ({ label: o, value: o }))
+        : [],
+    });
+  } else if (props.field.url_method) {
     return h(Autocomplete, {
       options: apiOptions.data,
       size: "sm",

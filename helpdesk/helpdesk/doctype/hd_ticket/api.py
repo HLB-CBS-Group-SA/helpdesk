@@ -335,6 +335,13 @@ def merge_ticket(source: str, target: str):
 
     controller = get_controller("HD Ticket")
 
+    # HLB-FORK: merge-keeps-status — the copies below are history, not new
+    # messages. Without this flag each copied inbound email runs the target's
+    # on_communication_update, which reopens it onto the default open status
+    # ("Unassigned" here) and bumps last_customer_response. frappe.flags is
+    # per request, so a failure part-way cannot leave it set.
+    frappe.flags.hd_merge_target = target
+
     source_comments = frappe.db.get_list(
         "HD Ticket Comment", filters={"reference_ticket": source}, pluck="name"
     )
@@ -357,6 +364,7 @@ def merge_ticket(source: str, target: str):
         pluck="name",
     )
     duplicate_list_retain_timestamp("File", source_attachments, target, controller)
+    frappe.flags.hd_merge_target = None
 
     doc = frappe.get_doc("HD Ticket", source)
 
@@ -554,14 +562,12 @@ def duplicate_ticket(ticket_doc, subject):
 @frappe.whitelist()
 @agent_only
 def get_ticket_customizations():
-    # get form script
-    # get default ticket template
-    custom_fields = frappe.get_all(
-        "HD Ticket Template Field",
-        filters={"parent": "Default"},
-        fields=["fieldname", "required", "placeholder", "url_method"],
-        order_by="idx",
-    )
+    # HLB-FORK: sidebar-fields — return the template's FULL field meta (this
+    # includes depends_on/mandatory_depends_on, joined from the Custom Field),
+    # so the agent sidebar can hide fields that don't apply to the ticket's type.
+    # Upstream returned only fieldname/required/placeholder/url_method, so every
+    # type's fields dumped into the sidebar at once.
+    custom_fields = get_fields_meta("Default")
     form_scripts = get_form_script("HD Ticket")
     return {"custom_fields": custom_fields, "_form_script": form_scripts}
 

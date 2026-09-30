@@ -1,52 +1,71 @@
 <template>
-  <div class="flex items-center gap-3">
-    <Avatar
-      :label="contact.data?.name ?? ''"
-      :image="contactImage"
-      size="3xl"
-    />
-    <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-      <Tooltip :text="contact.data?.name || contact.data?.email_id">
-        <div class="flex min-w-0 items-center gap-1.5 w-fit max-w-[65%]">
+  <!-- HLB-FORK: editable-submitter — upstream's contact row, with the
+       Submitter picker under it (below). -->
+  <div class="flex flex-col gap-2.5">
+    <div class="flex items-center gap-3">
+      <Avatar
+        :label="contact.data?.name ?? ''"
+        :image="contactImage"
+        size="3xl"
+      />
+      <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+        <Tooltip :text="contact.data?.name || contact.data?.email_id">
+          <div class="flex min-w-0 items-center gap-1.5 w-fit max-w-[65%]">
+            <p
+              class="min-h-[1lh] cursor-pointer truncate text-lg font-medium text-ink-gray-7 hover:text-ink-gray-9"
+              @click="openContact(contact.data?.name)"
+            >
+              {{ contact.data?.name || contact.data?.email_id }}
+            </p>
+          </div>
+        </Tooltip>
+        <div class="flex items-center gap-1 text-p-sm text-ink-gray-6">
           <p
-            class="min-h-[1lh] cursor-pointer truncate text-lg font-medium text-ink-gray-7 hover:text-ink-gray-9"
-            @click="openContact(contact.data?.name)"
+            class="cursor-copy transition-colors hover:text-ink-gray-8"
+            @click="
+              copyToClipboard(
+                ticket.doc.name,
+                `Ticket #${ticket.doc.name} copied`
+              )
+            "
           >
-            {{ contact.data?.name || contact.data?.email_id }}
+            #{{ ticket.doc.name }}
           </p>
-        </div>
-      </Tooltip>
-      <div class="flex items-center gap-1 text-p-sm text-ink-gray-6">
-        <p
-          class="cursor-copy transition-colors hover:text-ink-gray-8"
-          @click="
-            copyToClipboard(
-              ticket.doc.name,
-              `Ticket #${ticket.doc.name} copied`
-            )
-          "
-        >
-          #{{ ticket.doc.name }}
-        </p>
-        <div class="flex items-center">
-          <span>{{
-            ticket.doc.via_customer_portal ? __("via Portal") : __("via Email")
-          }}</span>
+          <div class="flex items-center">
+            <span>{{
+              ticket.doc.via_customer_portal
+                ? __("via Portal")
+                : __("via Email")
+            }}</span>
+          </div>
         </div>
       </div>
+      <Tooltip v-if="isCallingEnabled" :text="__('Call contact')">
+        <Button variant="ghost" @click="callContact">
+          <template #icon>
+            <PhoneIcon class="size-4" />
+          </template>
+        </Button>
+      </Tooltip>
+      <SetContactPhoneModal
+        v-model="showPhoneModal"
+        :name="contact.data?.name ?? ''"
+        @onUpdate="contact.reload"
+      />
     </div>
-    <Tooltip v-if="isCallingEnabled" :text="__('Call contact')">
-      <Button variant="ghost" @click="callContact">
-        <template #icon>
-          <PhoneIcon class="size-4" />
-        </template>
-      </Button>
-    </Tooltip>
-    <SetContactPhoneModal
-      v-model="showPhoneModal"
-      :name="contact.data?.name ?? ''"
-      @onUpdate="contact.reload"
-    />
+
+    <!-- HLB-FORK: editable-submitter — agents can reassign who submitted the
+        ticket. Lists Contacts (the people/users known to the helpdesk). -->
+    <div class="flex items-center gap-2">
+      <span class="text-sm text-ink-gray-5 shrink-0 w-[74px]">Submitter</span>
+      <Link
+        class="flex-1"
+        :doctype="'Contact'"
+        :modelValue="ticket.doc?.contact"
+        :placeholder="'Select a person'"
+        @update:model-value="updateSubmitter"
+      />
+    </div>
   </div>
 </template>
 
@@ -56,6 +75,8 @@ import { useTelephonyStore } from "@/stores/telephony";
 import { useUserStore } from "@/stores/user";
 import { TicketContactSymbol, TicketSymbol } from "@/types";
 import { copyToClipboard, openContact } from "@/utils";
+// HLB-FORK: editable-submitter
+import { Link } from "@/components";
 import { Avatar, Button, Tooltip } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, inject, ref } from "vue";
@@ -77,6 +98,15 @@ const contactImage = computed(() => {
     contact.value?.data?.image || (email && getUser(email)?.user_image) || ""
   );
 });
+
+// HLB-FORK: editable-submitter — reassign the ticket's submitter (contact).
+const updateSubmitter = (val: string) => {
+  if (!val || val === ticket.value.doc?.contact) return;
+  ticket.value.setValue.submit(
+    { contact: val },
+    { onSuccess: () => contact.value.reload() }
+  );
+};
 
 const callContact = () => {
   if (!contact.value.data.mobile_no && !contact.value.data.phone) {

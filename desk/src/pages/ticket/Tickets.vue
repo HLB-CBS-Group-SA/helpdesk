@@ -66,6 +66,16 @@
       :selections="listSelections"
       @success="reset(true)"
     />
+    <!-- HLB-FORK: ticket-batch — see SetBatchModal.vue for why this is a Link
+         Custom Field and not frappe tags. Upstream's bulk Edit (1.30) can set
+         the same field; Set batch stays because it can also create a new
+         batch in the same step and writes the change to each ticket's
+         activity feed (company_helpdesk api.set_batch, #38). -->
+    <SetBatchModal
+      v-model="showSetBatchModal"
+      :selections="listSelections"
+      @success="reset(true)"
+    />
   </div>
 </template>
 
@@ -77,6 +87,8 @@ import TicketPriority from "@/components/TicketPriority.vue";
 import BulkAssignModal from "@/components/ticket-agent/BulkAssignModal.vue";
 import BulkEditModal from "@/components/ticket-agent/BulkEditModal.vue";
 import BulkReplyModal from "@/components/ticket-agent/BulkReplyModal.vue";
+// HLB-FORK: ticket-batch
+import SetBatchModal from "@/components/ticket-agent/SetBatchModal.vue";
 import ExportModal from "@/components/ticket/ExportModal.vue";
 import ViewBreadcrumbs from "@/components/ViewBreadcrumbs.vue";
 import { normalizeFilters } from "@/components/view-controls/filter";
@@ -124,6 +136,8 @@ const listSelections = ref(new Set());
 const showBulkReplyModal = ref(false);
 const showBulkEditModal = ref(false);
 const showBulkAssignModal = ref(false);
+// HLB-FORK: ticket-batch
+const showSetBatchModal = ref(false);
 
 // Replying, assigning and editing in bulk are agent-side actions only.
 const agentOnly = () => !isCustomerPortal.value;
@@ -165,6 +179,18 @@ const selectBannerActions = [
       listSelections.value = new Set(selections);
       showBulkEditModal.value = true;
     },
+  },
+  // HLB-FORK: ticket-batch — the selection banner is the only place this makes
+  // sense: batching is something you decide about a set of tickets you are
+  // already looking at, not one at a time from inside each ticket.
+  {
+    label: __("Set batch"),
+    icon: "lucide-layers",
+    onClick: (selections: Set<string>) => {
+      listSelections.value = new Set(selections);
+      showSetBatchModal.value = true;
+    },
+    condition: agentOnly,
   },
 ];
 

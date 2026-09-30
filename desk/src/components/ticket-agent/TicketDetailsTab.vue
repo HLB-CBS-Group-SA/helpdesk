@@ -75,13 +75,26 @@
           </div>
         </Section>
 
+        <!-- HLB-FORK: procurement-signature — the Procurement Request's flow. -->
+        <ProcurementPanel
+          v-if="ticket.doc?.ticket_type === 'Procurement Request'"
+          :ticket-id="ticket.doc.name"
+          @changed="onProcurementChanged"
+        />
+
         <!-- Ticket Info (custom fields) -->
         <div v-if="Boolean(customFields.length)">
           <Section
             :label="__('More Details')"
             v-model:opened="openedSections.ticketInfo"
           >
-            <div class="space-y-2.5 pb-2 pt-0.5">
+            <!-- HLB-FORK: agent-layout — as the main pane this is much wider
+                 than the stock sidebar, so the per-type intake fields lay out
+                 in two columns from `md` up instead of one tall list. Below
+                 `md` (and in a narrowed pane) it stays single-column. -->
+            <div
+              class="grid grid-cols-1 gap-x-6 gap-y-2.5 pb-2 pt-0.5 md:grid-cols-2"
+            >
               <template v-for="field in customFields">
                 <TicketField
                   v-if="field.visible"
@@ -148,7 +161,10 @@
 </template>
 
 <script setup lang="ts">
-import { parseField } from "@/composables/formCustomisation";
+import {
+  evaluateDependsOnValue,
+  parseField,
+} from "@/composables/formCustomisation";
 import { useNotifyTicketUpdate } from "@/composables/realtime";
 import { useShortcut } from "@/composables/shortcuts";
 import { getMeta } from "@/stores/meta";
@@ -173,18 +189,32 @@ import AssignTo from "./AssignTo.vue";
 import TicketContact from "./TicketContact.vue";
 import TicketFeedback from "./TicketFeedback.vue";
 import TicketSLA from "./TicketSLA.vue";
+// HLB-FORK: procurement-signature
+import ProcurementPanel from "./ProcurementPanel.vue";
 
 const ticket = inject(TicketSymbol)!;
 const assignees = inject(AssigneeSymbol)!;
 const customizations = inject(CustomizationSymbol)!;
 const activities = inject(ActivitiesSymbol)!;
 const recentSimilarTickets = inject(RecentSimilarTicketsSymbol)!;
+
+// HLB-FORK: procurement-signature — a step moves the status, the stage and the
+// assignee, so everything showing them is fetched again.
+function onProcurementChanged() {
+  ticket.value.reload();
+  assignees.value.reload();
+  activities.value.reload();
+}
 const { getFields, getField } = getMeta("HD Ticket");
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
 
 const dateFormat = window.date_format;
 const { getStatus, colorMap } = useTicketStatusStore();
 
+// HLB-FORK: department — `customer` stays: on this site it is the Department
+// the ticket belongs to (HD Customer renamed by Translation rows in
+// company_helpdesk setup/terminology.py). Upstream 1.30 shows it in Overview,
+// which is all the old fork change did. See manifest id=ui-agent-department.
 const CORE_FIELDS = ["priority", "ticket_type", "customer", "agent_group"];
 
 const coreFields = computed(() => {
@@ -216,6 +246,19 @@ const customFields = computed(() => {
   customFields = customFields.filter(
     (f) => !excludedFields.includes(f.fieldname)
   );
+  // HLB-FORK: sidebar-fields — the Default template lists every ticket type's
+  // fields; only show the ones that apply to THIS ticket, plus any field that
+  // already has a value. Without this the panel lists every type's fields.
+  // The depends_on expression is evaluated, not substring-matched for the
+  // ticket type: `cancel_reason` is gated by STATUS, and must appear at the
+  // moment somebody cancels. The intake form evaluates the same strings.
+  customFields = customFields.filter((f) => {
+    const dep = f.depends_on || "";
+    if (!dep) return true;
+    if (evaluateDependsOnValue(dep, ticket.value.doc)) return true;
+    const val = ticket.value.doc[f.fieldname];
+    return val !== null && val !== undefined && val !== "";
+  });
   let _customFields = customFields
     .map((f) => {
       let fieldMeta = getField(f.fieldname);
@@ -257,8 +300,13 @@ function trimScrollSpacer() {
   );
 }
 
+// HLB-FORK: agent-layout — this pane is the MAIN content (see TicketAgent.vue),
+// so the ticket's own information is open by default. The storage key is our
+// own: useStorage(..., { mergeDefaults: true }) keeps a stored value for a
+// known key, so agents who had collapsed upstream's sections would never see
+// these defaults. Upstream's new sections (feedback, keyInfo) join it.
 const openedSections = useStorage(
-  "openedSections",
+  "hlbOpenedSections",
   {
     feedback: true,
     keyInfo: true,
