@@ -13,7 +13,13 @@
       </h3>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <template v-for="name in section.fields" :key="name">
-          <div v-if="show(name)" :class="WIDE.has(name) && 'sm:col-span-2'">
+          <div
+            v-if="show(name)"
+            :class="{
+              'sm:col-span-2': WIDE.has(name),
+              'sm:col-start-1': ROW_START.has(name),
+            }"
+          >
             <span
               v-if="!CHECKBOX.has(name)"
               class="mb-1.5 block text-sm text-ink-gray-7"
@@ -22,9 +28,9 @@
               <span v-if="required(name)" class="text-ink-red-6">*</span>
             </span>
 
-            <!-- amounts: 100 000 000.00 -->
+            <!-- amounts: 100 000 000.00; the exchange rate to 4 places -->
             <FormControl
-              v-if="MONEY.has(name)"
+              v-if="name in DECIMALS"
               type="text"
               inputmode="decimal"
               :model-value="moneyShown(name)"
@@ -51,7 +57,7 @@
               type="select"
               :options="selectOptions(name)"
               :model-value="doc[name]"
-              @update:model-value="(v) => set(name, v)"
+              @update:model-value="(v) => setSelect(name, v)"
             />
             <DatePicker
               v-else-if="meta[name]?.fieldtype === 'Date'"
@@ -92,6 +98,7 @@
               v-else
               type="text"
               :placeholder="placeholder(name)"
+              :disabled="disabled(name)"
               :model-value="doc[name]"
               @update:model-value="(v) => set(name, v)"
             />
@@ -141,6 +148,12 @@
           )
         }}
       </p>
+      <p
+        v-if="section.lateNotice && payRunNote"
+        class="mt-3 text-p-sm text-ink-gray-6"
+      >
+        {{ payRunNote }}
+      </p>
       <p v-if="section.declarant" class="mt-3 text-p-sm text-ink-gray-6">
         {{ __("Requester: {0}, {1}", userName, todayShown) }}
       </p>
@@ -168,9 +181,15 @@ import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Field } from "@/types";
 import { uploadFunction } from "@/utils";
-import { Button, DatePicker, FormControl, toast } from "frappe-ui";
+import {
+  Button,
+  createResource,
+  DatePicker,
+  FormControl,
+  toast,
+} from "frappe-ui";
 import { storeToRefs } from "pinia";
-import { computed, defineComponent, h, onMounted, ref } from "vue";
+import { computed, defineComponent, h, onMounted, ref, watch } from "vue";
 
 type UploadedFile = { name: string; file_name: string; file_url: string };
 
@@ -215,6 +234,7 @@ const sections = [
     fields: [
       "pr_currency",
       "pr_currency_other",
+      "pr_exchange_rate",
       "pr_amount_basis",
       "pr_amount",
       "pr_vat_rate",
@@ -223,8 +243,8 @@ const sections = [
       "pr_periods",
       "pr_term_from",
       "pr_term_to",
-      "pr_notice_period",
       "pr_notice_unit",
+      "pr_notice_period",
       "pr_renewal_date",
       "pr_auto_renew",
     ],
@@ -290,7 +310,20 @@ const TEXTAREA = new Set([
   "pr_budget_motivation",
   "pr_conflict_details",
 ]);
-const MONEY = new Set(["pr_amount", "pr_deposit_amount"]);
+// Typed as decimals, shown with spaced thousands; the value is the places kept.
+const DECIMALS: Record<string, number> = {
+  pr_amount: 2,
+  pr_deposit_amount: 2,
+  pr_exchange_rate: 4,
+};
+// Each starts a new row on a wide screen, so its pair sits side by side.
+const ROW_START = new Set(["pr_term_from", "pr_notice_unit"]);
+// The notice period's unit comes first; Days are work days (#92).
+const OPTION_LABELS: Record<string, Record<string, string>> = {
+  pr_notice_unit: { Days: "Work days" },
+};
+const CALENDAR_MONTH = "Calendar Month";
+const PER_USAGE = "Per usage / variable";
 const CHECKBOX = new Set(["pr_declaration"]);
 
 const meta = computed<Record<string, any>>(() =>
@@ -304,6 +337,10 @@ function required(name: string): boolean {
   return Boolean(meta.value[name]?.required);
 }
 function label(name: string): string {
+  // Per usage / variable: the amount is a monthly cap (#92).
+  if (name === "pr_amount" && props.doc.pr_frequency === PER_USAGE) {
+    return __("Maximum per month (cap)");
+  }
   return __(meta.value[name]?.label || name);
 }
 function placeholder(name: string): string {
@@ -313,11 +350,26 @@ function selectOptions(name: string) {
   const values = (meta.value[name]?.options || "").split("\n").filter(Boolean);
   return [
     { label: "", value: "" },
-    ...values.map((v: string) => ({ label: __(v), value: v })),
+    ...values.map((v: string) => ({
+      label: __(OPTION_LABELS[name]?.[v] || v),
+      value: v,
+    })),
   ];
 }
 function set(name: string, value: any) {
   props.doc[name] = value;
+}
+function setSelect(name: string, value: any) {
+  set(name, value);
+  // A calendar month's notice has no number: it is always the one month.
+  if (name === "pr_notice_unit" && value === CALENDAR_MONTH) {
+    set("pr_notice_period", "");
+  }
+}
+function disabled(name: string): boolean {
+  return (
+    name === "pr_notice_period" && props.doc.pr_notice_unit === CALENDAR_MONTH
+  );
 }
 
 const dateFormat = (window as any).date_format?.toUpperCase() || "DD-MM-YYYY";
@@ -347,15 +399,15 @@ onMounted(() => {
 // shown as typed, so the cursor never jumps.
 const drafts = ref<Record<string, string>>({});
 
-function formatMoney(value: any): string {
+function formatMoney(value: any, places = 2): string {
   if (value === "" || value === null || value === undefined) return "";
   const n = Number(value);
   if (Number.isNaN(n)) return "";
-  const [whole, cents] = n.toFixed(2).split(".");
+  const [whole, cents] = n.toFixed(places).split(".");
   return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ")}.${cents}`;
 }
 function moneyShown(name: string): string {
-  return drafts.value[name] ?? formatMoney(props.doc[name]);
+  return drafts.value[name] ?? formatMoney(props.doc[name], DECIMALS[name]);
 }
 function setMoney(name: string, typed: string) {
   let clean = String(typed ?? "")
@@ -363,7 +415,9 @@ function setMoney(name: string, typed: string) {
     .replace(",", ".")
     .replace(/[^\d.]/g, "");
   const [whole, ...rest] = clean.split(".");
-  if (rest.length) clean = `${whole}.${rest.join("").slice(0, 2)}`;
+  if (rest.length) {
+    clean = `${whole}.${rest.join("").slice(0, DECIMALS[name] ?? 2)}`;
+  }
   drafts.value[name] = clean;
   props.doc[name] = clean === "" || clean === "." ? "" : Number(clean);
 }
@@ -407,19 +461,36 @@ function termMonths(): number {
   if (after.getDate() > start.getDate()) months += 1;
   return Math.max(months, 1);
 }
+// Whole months in the committed term: how many times a month fits (#92).
+// termMonths (a part month counts) is for clause 8.3 only.
+function wholeMonths(): number {
+  const start = parseDate(props.doc.pr_term_from);
+  const end = parseDate(props.doc.pr_term_to);
+  if (!start || !end || end < start) return 0;
+  const after = new Date(end);
+  after.setDate(after.getDate() + 1);
+  let months =
+    (after.getFullYear() - start.getFullYear()) * 12 +
+    (after.getMonth() - start.getMonth());
+  if (after.getDate() < start.getDate()) months -= 1;
+  return months;
+}
 function periods(): number {
   const frequency = props.doc.pr_frequency;
   if (!frequency || frequency === "Once-off") return 1;
   if (MONTHS[frequency]) {
-    const months = termMonths();
-    return months ? Math.ceil(months / MONTHS[frequency]) : 1;
+    return Math.max(Math.floor(wholeMonths() / MONTHS[frequency]), 1);
+  }
+  if (frequency === PER_USAGE) {
+    // The amount is the monthly cap, so every month of the term counts.
+    return Math.max(wholeMonths(), 1);
   }
   if (frequency === "Weekly") {
     const start = parseDate(props.doc.pr_term_from);
     const end = parseDate(props.doc.pr_term_to);
     if (!start || !end || end < start) return 1;
     const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-    return Math.ceil(days / 7);
+    return Math.max(Math.floor(days / 7), 1);
   }
   return Math.max(Number(props.doc.pr_periods) || 1, 1);
 }
@@ -430,13 +501,18 @@ const currency = computed(() =>
     : props.doc.pr_currency || ""
 );
 
+// A cost in another currency has no VAT; it is also shown in rand (#92).
+const foreign = computed(
+  () => Boolean(props.doc.pr_currency) && props.doc.pr_currency !== "ZAR"
+);
+const round = (n: number) => Math.round(n * 100) / 100;
+
 const totals = computed(() => {
   const amount = Number(props.doc.pr_amount);
   if (props.doc.pr_amount === "" || Number.isNaN(amount)) return null;
-  const rate = VAT_RATES[props.doc.pr_vat_rate] ?? 0.15;
-  const round = (n: number) => Math.round(n * 100) / 100;
+  const rate = foreign.value ? 0 : VAT_RATES[props.doc.pr_vat_rate] ?? 0.15;
   let excl: number, vat: number, total: number;
-  if (props.doc.pr_amount_basis === "Including VAT") {
+  if (!foreign.value && props.doc.pr_amount_basis === "Including VAT") {
     total = round(amount);
     excl = round(amount / (1 + rate));
     vat = round(total - excl);
@@ -448,21 +524,120 @@ const totals = computed(() => {
   return { excl, vat, total, term: round(total * periods()) };
 });
 
-const figures = computed(() => {
-  if (!totals.value) return null;
-  const c = currency.value ? `${currency.value} ` : "";
-  return [
-    { label: __("Excluding VAT"), value: c + formatMoney(totals.value.excl) },
-    { label: __("VAT"), value: c + formatMoney(totals.value.vat) },
-    {
-      label: __("Including VAT"),
-      value: c + formatMoney(totals.value.total),
-    },
-    {
-      label: __("Over the term ({0})", periods()),
-      value: c + formatMoney(totals.value.term),
-    },
+// "Total Commitment (12 months)": the periods counted, in the frequency's own
+// unit. Per usage counts months at the cap; Other says "payments".
+const PERIOD_LABELS: Record<string, [string, string]> = {
+  Monthly: ["1 month", "{0} months"],
+  Quarterly: ["1 quarter", "{0} quarters"],
+  "Bi-annual": ["1 half-year", "{0} half-years"],
+  Annual: ["1 year", "{0} years"],
+  Weekly: ["1 week", "{0} weeks"],
+};
+function periodsShown(): string {
+  const frequency = props.doc.pr_frequency;
+  if (!frequency || frequency === "Once-off") return __("once-off");
+  const n = periods();
+  const unit = frequency === PER_USAGE ? "Monthly" : frequency;
+  const [one, many] = PERIOD_LABELS[unit] || [
+    "1 payment",
+    "{0} payments",
   ];
+  return n === 1 ? __(one) : __(many, n);
+}
+// "Excluding VAT (Monthly)": the amount is per period of a regular frequency.
+function perPeriod(): string {
+  const frequency = props.doc.pr_frequency;
+  if (frequency === PER_USAGE) return ` (${__("monthly cap")})`;
+  return PERIOD_LABELS[frequency] ? ` (${__(frequency)})` : "";
+}
+
+const figures = computed(() => {
+  const t = totals.value;
+  if (!t) return null;
+  const c = currency.value ? `${currency.value} ` : "";
+  const per = perPeriod();
+  const count = periodsShown();
+  let rows: { label: string; value: string }[];
+  if (foreign.value) {
+    const exchange = Number(props.doc.pr_exchange_rate) || 0;
+    const zar = (n: number) => `ZAR ${formatMoney(round(n * exchange))}`;
+    rows = [
+      {
+        label: __("Amount in {0}", currency.value) + per,
+        value: c + formatMoney(t.total),
+      },
+      { label: __("Amount in ZAR") + per, value: exchange ? zar(t.total) : "" },
+      {
+        label: __("Total Commitment in {0} ({1})", currency.value, count),
+        value: c + formatMoney(t.term),
+      },
+      {
+        label: __("Total Commitment in ZAR ({0})", count),
+        value: exchange ? zar(t.term) : "",
+      },
+    ];
+  } else {
+    rows = [
+      { label: __("Excluding VAT") + per, value: c + formatMoney(t.excl) },
+      { label: __("VAT"), value: c + formatMoney(t.vat) },
+      { label: __("Including VAT") + per, value: c + formatMoney(t.total) },
+      {
+        label: __("Total Commitment (incl VAT) ({0})", count),
+        value: c + formatMoney(t.term),
+      },
+    ];
+  }
+  if (cancelBy.value) {
+    rows.push({ label: __("Cancel / Renew by"), value: cancelBy.value });
+  }
+  return rows;
+});
+
+// Cancel / renew by: 5 work days before the notice must reach the supplier.
+// Weekends only here; the server also skips public holidays, and keeps its
+// date on the ticket (company_helpdesk setup/procurement.py, cancel_by).
+function workDaysBefore(day: Date, count: number): Date {
+  const d = new Date(day);
+  while (count > 0) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) count -= 1;
+  }
+  return d;
+}
+function monthsBefore(day: Date, months: number): Date {
+  const first = new Date(day.getFullYear(), day.getMonth() - months, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(
+    first.getFullYear(),
+    first.getMonth(),
+    Math.min(day.getDate(), last)
+  );
+}
+// The renewal date, or else the day after the committed term ends.
+function decisionDate(): Date | null {
+  const renewal = parseDate(props.doc.pr_renewal_date);
+  if (renewal) return renewal;
+  const end = parseDate(props.doc.pr_term_to);
+  if (!end) return null;
+  end.setDate(end.getDate() + 1);
+  return end;
+}
+const cancelBy = computed<string>(() => {
+  const renewal = decisionDate();
+  const frequency = props.doc.pr_frequency;
+  if (!renewal || !frequency || frequency === "Once-off") return "";
+  const unit = props.doc.pr_notice_unit;
+  const notice = Number(props.doc.pr_notice_period) || 0;
+  let noticeBy = renewal;
+  if (unit === CALENDAR_MONTH) {
+    // A whole calendar month before the renewal date's month.
+    noticeBy = new Date(renewal.getFullYear(), renewal.getMonth() - 1, 1);
+  } else if (unit === "Months" && notice) {
+    noticeBy = monthsBefore(renewal, notice);
+  } else if (unit === "Days" && notice) {
+    noticeBy = workDaysBefore(renewal, notice);
+  }
+  return workDaysBefore(noticeBy, 5).toLocaleDateString();
 });
 
 const twoApprovers = computed(
@@ -487,6 +662,37 @@ const lateBy = computed<number>(() => {
     if (day.getDay() !== 0 && day.getDay() !== 6) days += 1;
   }
   return days < needed ? needed : 0;
+});
+
+// ---- the creditors run (#92). A request fully approved by the month's
+// accounts cut-off (site config, the 25th by default) goes with that month's
+// creditors. The server says which run, for a request approved today, and
+// whether the payment date is before its release. The release date itself is
+// internal and never shown.
+const payRun = createResource({
+  url: "company_helpdesk.procurement_api.pay_run",
+  method: "GET",
+});
+watch(
+  () => props.doc.pr_payment_date,
+  (paymentDate) => payRun.fetch({ payment_date: paymentDate || null }),
+  { immediate: true }
+);
+const payRunNote = computed<string>(() => {
+  const run = payRun.data;
+  // An out-of-cycle payment is released on its own, once approved.
+  if (!run || props.doc.pr_out_of_cycle === "Yes") return "";
+  const cutoff = parseDate(run.cutoff);
+  if (!cutoff) return "";
+  const note = __(
+    "To be paid with the creditors of {0}, the request must be fully approved by the accounts cut-off on {1}. Approved later, it goes with the next month's.",
+    cutoff.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+    cutoff.toLocaleDateString()
+  );
+  if (!run.out_of_cycle_needed) return note;
+  return `${note} ${__(
+    "The payment is due before those creditors are paid, so it needs an out-of-cycle payment: answer Yes below and motivate it, or ask Finance for an exception."
+  )}`;
 });
 
 // ---- uploads: onto the new ticket, with the rest of its attachments
