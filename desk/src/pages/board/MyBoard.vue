@@ -1,14 +1,66 @@
 <template>
   <!-- HLB-FORK: my-board — a Kanban view of the tickets assigned to me (#57).
-       One column per open status, in HD Ticket Status order. A card moves
-       to another status by drag, or from its menu. Finished tickets
-       (status category Resolved) are not shown. -->
+       One column per open status. A card moves to another status by drag,
+       or from its menu. Finished tickets (status category Resolved) are not
+       shown. Each agent picks which columns show, and their order, under
+       "Columns" (#93); the choice is kept in this browser. -->
   <div class="flex flex-col h-full">
     <LayoutHeader>
       <template #left-header>
         <div class="text-lg-medium text-ink-gray-9">{{ __("My board") }}</div>
       </template>
       <template #right-header>
+        <NestedPopover placement="bottom-end">
+          <template #target>
+            <Button :label="__('Columns')" variant="subtle">
+              <template #prefix>
+                <ColumnsIcon class="h-4" />
+              </template>
+            </Button>
+          </template>
+          <template #body>
+            <div
+              class="my-2 p-1.5 min-w-56 rounded-lg bg-surface-elevation-2 shadow-2xl ring-1 ring-black ring-opacity-5"
+            >
+              <Draggable
+                :model-value="settingsRows"
+                item-key="status"
+                :delay="isTouchScreenDevice() ? 200 : 0"
+                @update:model-value="setOrder"
+              >
+                <template #item="{ element }">
+                  <div
+                    class="flex cursor-grab items-center gap-2 rounded px-2 py-1.5 text-base text-ink-gray-8 hover:bg-surface-gray-2"
+                  >
+                    <DragIcon class="h-3.5 shrink-0" />
+                    <FormControl
+                      type="checkbox"
+                      :label="element.status"
+                      :model-value="element.shown"
+                      @update:model-value="toggleColumn(element.status)"
+                    />
+                  </div>
+                </template>
+              </Draggable>
+              <div
+                class="mt-1.5 flex gap-1 border-t border-outline-elevation-2 pt-1.5"
+              >
+                <Button
+                  class="flex-1"
+                  variant="ghost"
+                  :label="__('Show all')"
+                  @click="showAllColumns"
+                />
+                <Button
+                  class="flex-1"
+                  variant="ghost"
+                  :label="__('Reset')"
+                  @click="resetColumns"
+                />
+              </div>
+            </div>
+          </template>
+        </NestedPopover>
         <Button
           :label="__('Refresh')"
           variant="subtle"
@@ -81,6 +133,12 @@
             </div>
           </div>
         </div>
+        <div
+          v-if="!columns.length && openStatuses.length"
+          class="self-center px-4 text-sm text-ink-gray-5"
+        >
+          {{ __("Every column is hidden. Choose some under Columns.") }}
+        </div>
       </div>
     </div>
   </div>
@@ -88,21 +146,26 @@
 
 <script setup lang="ts">
 import { LayoutHeader } from "@/components";
-import { IndicatorIcon } from "@/components/icons";
+import { ColumnsIcon, DragIcon, IndicatorIcon } from "@/components/icons";
+import NestedPopover from "@/components/NestedPopover.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { HDTicketStatus } from "@/types/doctypes";
+import { isTouchScreenDevice } from "@/utils";
+import { useStorage } from "@vueuse/core";
 import {
   Button,
   createListResource,
   createResource,
   Dropdown,
+  FormControl,
   toast,
 } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import Draggable from "vuedraggable";
 
 type BoardTicket = {
   name: string;
@@ -143,15 +206,86 @@ const tickets = createListResource({
   auto: true,
 });
 
-const columns = computed(() =>
-  openStatuses.value.map((s) => ({
+// ---- which columns show, and in what order (#93), per agent, in this browser.
+// Until an agent chooses, the board uses the order the team agreed. A status
+// not named here goes after these, in HD Ticket Status order. Unassigned is
+// hidden at first: assigning a ticket moves it out of Unassigned, so on a
+// board of my assigned tickets that column is almost always empty.
+const DEFAULT_ORDER = [
+  "Not yet started",
+  "In progress",
+  "Pending approval",
+  "Awaiting feedback",
+  "Meeting planned",
+  "Pending Procurement",
+  "Escalated",
+  "Unassigned",
+];
+const DEFAULT_HIDDEN = ["Unassigned"];
+
+const boardSettings = useStorage<{ order: string[]; hidden: string[] }>(
+  `hlb-my-board-columns:${userId.value}`,
+  { order: [], hidden: [...DEFAULT_HIDDEN] },
+  localStorage,
+  { mergeDefaults: true }
+);
+
+const sameStatus = (a: string, b: string) =>
+  a.toLowerCase() === b.toLowerCase();
+
+const orderedStatuses = computed<HDTicketStatus[]>(() => {
+  const order = boardSettings.value.order.length
+    ? boardSettings.value.order
+    : DEFAULT_ORDER;
+  const rank = (s: HDTicketStatus) => {
+    const i = order.findIndex((name) => sameStatus(name, s.label_agent));
+    return i === -1 ? order.length : i;
+  };
+  // Array.sort is stable, so unranked statuses keep the store's order.
+  return [...openStatuses.value].sort((a, b) => rank(a) - rank(b));
+});
+
+function isHidden(status: string): boolean {
+  return boardSettings.value.hidden.some((name) => sameStatus(name, status));
+}
+
+const settingsRows = computed(() =>
+  orderedStatuses.value.map((s) => ({
     status: s.label_agent,
-    // parsed_color is added by the status store's transform, not the doctype.
-    color: (s as HDTicketStatus & { parsed_color: string }).parsed_color,
-    tickets: (tickets.data || []).filter(
-      (t: BoardTicket) => t.status === s.label_agent
-    ),
+    shown: !isHidden(s.label_agent),
   }))
+);
+
+function setOrder(rows: { status: string }[]) {
+  boardSettings.value.order = rows.map((r) => r.status);
+}
+
+function toggleColumn(status: string) {
+  const hidden = boardSettings.value.hidden;
+  boardSettings.value.hidden = isHidden(status)
+    ? hidden.filter((name) => !sameStatus(name, status))
+    : [...hidden, status];
+}
+
+function showAllColumns() {
+  boardSettings.value.hidden = [];
+}
+
+function resetColumns() {
+  boardSettings.value = { order: [], hidden: [...DEFAULT_HIDDEN] };
+}
+
+const columns = computed(() =>
+  orderedStatuses.value
+    .filter((s) => !isHidden(s.label_agent))
+    .map((s) => ({
+      status: s.label_agent,
+      // parsed_color is added by the status store's transform, not the doctype.
+      color: (s as HDTicketStatus & { parsed_color: string }).parsed_color,
+      tickets: (tickets.data || []).filter(
+        (t: BoardTicket) => t.status === s.label_agent
+      ),
+    }))
 );
 
 const setStatus = createResource({
@@ -187,7 +321,7 @@ function onDrop(status: string) {
 }
 
 function moveOptions(t: BoardTicket) {
-  return openStatuses.value
+  return orderedStatuses.value
     .filter((s) => s.label_agent !== t.status)
     .map((s) => ({
       label: __("Move to {0}", s.label_agent),
