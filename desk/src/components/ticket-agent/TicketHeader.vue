@@ -74,6 +74,12 @@
     @update="ticket.reload()"
   />
   <TicketSubjectModal v-model="showSubjectDialog" />
+  <!-- HLB-FORK: ticket-repeat — see TicketRepeatDialog.vue. -->
+  <TicketRepeatDialog
+    v-if="ticket?.doc?.name"
+    v-model="showRepeatDialog"
+    :ticket="String(ticket.doc.name)"
+  />
 
   <!-- HLB-FORK: cancel-reason — cancelling asks why, in the same step.
        company_helpdesk refuses to cancel a ticket without a reason
@@ -179,6 +185,8 @@ import Icon from "@/components/Icon.vue";
 import { MultipleAvatar } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TicketMergeModal from "@/components/ticket/TicketMergeModal.vue";
+// HLB-FORK: ticket-repeat
+import TicketRepeatDialog from "@/components/ticket-agent/TicketRepeatDialog.vue";
 import { showMergeModal } from "@/pages/ticket/modalStates";
 import {
   createToast,
@@ -218,6 +226,8 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideMerge from "~icons/lucide/merge";
+// HLB-FORK: ticket-repeat
+import LucideRepeat from "~icons/lucide/repeat";
 import { IndicatorIcon } from "../icons";
 import TicketSubjectModal from "./TicketSubjectModal.vue";
 const { $dialog } = globalStore();
@@ -356,6 +366,9 @@ function updateField(fieldname: string, value: string, callback = () => {}) {
   callback();
 }
 
+// HLB-FORK: ticket-repeat
+const showRepeatDialog = ref(false);
+
 // HLB-FORK: delete-reason — see the dialog in the template.
 const deleteDialog = reactive({
   show: false,
@@ -433,6 +446,12 @@ const defaultActions = computed(() => {
       onClick: () => (showMergeModal.value = true),
     });
   }
+  // HLB-FORK: ticket-repeat — raise a copy of this ticket on a schedule (#81).
+  items.push({
+    label: __("Repeat"),
+    icon: LucideRepeat,
+    onClick: () => (showRepeatDialog.value = true),
+  });
 
   return [
     {
