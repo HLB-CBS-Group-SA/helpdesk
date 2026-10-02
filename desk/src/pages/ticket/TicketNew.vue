@@ -75,6 +75,7 @@
         v-model:files="procurementFiles"
         :doc="templateFields"
         :fields="visibleFields"
+        @update:subject="(line) => (subject = line)"
       />
       <!-- existing fields -->
       <div
@@ -89,12 +90,14 @@
             {{ subjectCopy.label }}
             <span class="place-self-center text-ink-red-5"> * </span>
           </span>
-          <!-- TextInput rings only on :focus-visible, so a click leaves the
-               field with no outline; class lands on its wrapper, not the input -->
+          <!-- HLB-FORK: procurement-form — a Procurement Request's subject
+               is made from its form (#92), so it is shown, not typed.
+               TextInput rings only on :focus-visible; class lands on its wrapper -->
           <TextInput
             v-model="subject"
             variant="outline"
             :placeholder="subjectCopy.placeholder"
+            :disabled="isProcurement"
             maxlength="140"
           />
         </div>
@@ -412,7 +415,7 @@ const SUBJECT_OVERRIDES: Record<
   // HLB-FORK: procurement-form
   "Procurement Request": {
     label: "Request title",
-    placeholder: "What is being bought, and from whom.",
+    placeholder: "Made from the form: payment date, entity, amount.",
   },
 };
 
