@@ -37,7 +37,7 @@
                       type="checkbox"
                       :label="element.status"
                       :model-value="element.shown"
-                      @update:model-value="toggleColumn(element.status)"
+                      @update:model-value="(v) => setShown(element.status, v)"
                     />
                   </div>
                 </template>
@@ -260,11 +260,13 @@ function setOrder(rows: { status: string }[]) {
   boardSettings.value.order = rows.map((r) => r.status);
 }
 
-function toggleColumn(status: string) {
-  const hidden = boardSettings.value.hidden;
-  boardSettings.value.hidden = isHidden(status)
-    ? hidden.filter((name) => !sameStatus(name, status))
-    : [...hidden, status];
+// Sets, never toggles: frappe-ui's Checkbox emits update:modelValue twice per
+// click (defineModel and an explicit emit), so a toggle undid itself (#93).
+function setShown(status: string, shown: boolean) {
+  const hidden = boardSettings.value.hidden.filter(
+    (name) => !sameStatus(name, status)
+  );
+  boardSettings.value.hidden = shown ? hidden : [...hidden, status];
 }
 
 function showAllColumns() {

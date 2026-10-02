@@ -200,6 +200,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "update:files", files: UploadedFile[]): void;
+  (e: "update:subject", subject: string): void;
 }>();
 
 const { userName } = storeToRefs(useAuthStore());
@@ -693,6 +694,50 @@ const payRunNote = computed<string>(() => {
   return `${note} ${__(
     "The payment is due before those creditors are paid, so it needs an out-of-cycle payment: answer Yes below and motivate it, or ask Finance for an exception."
   )}`;
+});
+
+// ---- the subject, made from the request (#92):
+//   [payment date] [entity] [Once-off: R6 000.00] (Budgeted)
+// so the operations manager reads the priority without opening the ticket.
+// The server makes the same subject on save (company_helpdesk
+// setup/procurement.py, set_subject); this is the preview the requester sees.
+const ENTITY_PREFIXES = [
+  "HLB CBS GROUP (SOUTH AFRICA) ",
+  "HLB CBS GROUP SOUTH AFRICA ",
+];
+function dateShown(value: string): string {
+  const d = parseDate(value);
+  if (!d) return "";
+  return dateFormat
+    .replace("DD", String(d.getDate()).padStart(2, "0"))
+    .replace("MM", String(d.getMonth() + 1).padStart(2, "0"))
+    .replace("YYYY", String(d.getFullYear()));
+}
+const subjectLine = computed<string>(() => {
+  const parts: string[] = [];
+  const due = dateShown(props.doc.pr_payment_date);
+  if (due) parts.push(due);
+  let entity = String(props.doc.pr_entity || "").trim();
+  const prefix = ENTITY_PREFIXES.find((p) =>
+    entity.toUpperCase().startsWith(p)
+  );
+  if (prefix) entity = entity.slice(prefix.length);
+  if (entity) parts.push(entity);
+  const frequency = props.doc.pr_frequency || "Once-off";
+  if (totals.value) {
+    const c = currency.value || "ZAR";
+    const amount = formatMoney(totals.value.total);
+    parts.push(
+      `${frequency}: ${c === "ZAR" ? `R${amount}` : `${c} ${amount}`}`
+    );
+  } else if (props.doc.pr_frequency) {
+    parts.push(frequency);
+  }
+  if (props.doc.pr_budgeted === "Yes") parts.push("(Budgeted)");
+  return parts.join(" ").slice(0, 140);
+});
+watch(subjectLine, (line) => emit("update:subject", line), {
+  immediate: true,
 });
 
 // ---- uploads: onto the new ticket, with the rest of its attachments
