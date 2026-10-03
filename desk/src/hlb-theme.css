@@ -1,0 +1,93 @@
+/* HLB-FORK: brand-theme — HLB CBS colours on the agent desk and the portal (#41).
+
+   frappe-ui keeps every colour in CSS variables: `:root` for light mode and
+   `[data-theme="dark"]` for dark mode (frappe-ui/tailwind/colorPalette.js). This
+   sheet is imported after index.css (main.js), so at equal specificity its values
+   win. It only re-points variables and a few selectors; no component is edited.
+
+   Brand palette (HLB CBS CI, the same hex as company_helpdesk hlb_brand.css):
+     #005A77 HLB Blue (main)      #003C4F Dark Blue      #0093A7 Light Blue
+     #FBBA00 Gold (highlight)     #DAE8ED Pale Blue      #3C3C3B Charcoal
+
+   Gold is the highlight only: the marker on the current sidebar item. It is too
+   pale on white for text or a focus ring (1.8:1), so those use the blues.
+   To change a colour, change the --hlb-* tokens below. */
+
+:root {
+  --hlb-blue: #005a77;
+  --hlb-dark-blue: #003c4f;
+  --hlb-light-blue: #0093a7;
+  --hlb-gold: #fbba00;
+  --hlb-pale-blue: #dae8ed;
+  --hlb-charcoal: #3c3c3b;
+
+  /* What the rules below use; dark mode re-points these. */
+  --hlb-primary: var(--hlb-blue);
+  --hlb-primary-hover: var(--hlb-dark-blue);
+  --hlb-on-primary: #ffffff;
+
+  --ink-blue-link: var(--hlb-blue);
+  --surface-sidebar: var(--hlb-pale-blue);
+  --focus-default: 0px 0px 0px 2px #0093a7b3;
+  --focus-outline-default: 2px solid #0093a7b3;
+}
+
+/* Dark mode: the greys take a little of the brand's blue, the sidebar is Dark
+   Blue, and the primary colour is Light Blue (HLB Blue is too dark to see on a
+   dark page). Lightness follows frappe-ui's own dark greys, so contrast holds. */
+[data-theme="dark"] {
+  --hlb-primary: var(--hlb-light-blue);
+  --hlb-primary-hover: #1aa6b8;
+  --hlb-on-primary: #0f1a1f;
+
+  --surface-base: #0f1a1f;
+  --surface-gray-1: #15232a;
+  --surface-gray-2: #1f3038;
+  --surface-gray-3: #2b3f47;
+  --surface-gray-4: #344b54;
+  --surface-elevation-1: #15232a;
+  --surface-elevation-2: #1a2a31;
+  --surface-elevation-3: #2b3f47;
+  --outline-gray-1: #1a2a31;
+  --outline-gray-2: #2b3f47;
+  --outline-gray-3: #344b54;
+  --outline-gray-4: #46626c;
+
+  --ink-blue-link: #4fb8c7;
+  --surface-sidebar: var(--hlb-dark-blue);
+  --focus-default: 0px 0px 0px 3px #0093a7cc;
+  --focus-outline-default: 3px solid #0093a7cc;
+}
+
+/* Primary actions. frappe-ui's solid button and an "on" Switch are
+   bg-surface-gray-10 (near black in light mode, near white in dark). */
+button.bg-surface-gray-10 {
+  background-color: var(--hlb-primary);
+  color: var(--hlb-on-primary);
+}
+button.bg-surface-gray-10:hover:not(:disabled),
+button.bg-surface-gray-10:active:not(:disabled) {
+  background-color: var(--hlb-primary-hover);
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background-color: var(--hlb-primary);
+  border-color: var(--hlb-primary);
+}
+
+/* The sidebar. Its hover and current-item colours are scoped to it, so the
+   rest of the page keeps frappe-ui's. (`:not(input)`: a disabled Checkbox also
+   carries bg-surface-sidebar.) */
+.bg-surface-sidebar:not(input) {
+  --surface-gray-2: #005a7714;
+}
+[data-theme="dark"] .bg-surface-sidebar:not(input) {
+  --surface-gray-2: #ffffff14;
+  --surface-elevation-3: #ffffff24;
+}
+
+/* The current page in the sidebar: the gold highlight. */
+.bg-surface-sidebar .shadow-sm.bg-surface-elevation-3 {
+  box-shadow: inset 3px 0 0 var(--hlb-gold), 0 1px 2px 0 rgba(0, 0, 0, 0.08);
+}
