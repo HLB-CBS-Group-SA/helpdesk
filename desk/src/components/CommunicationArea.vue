@@ -29,6 +29,20 @@
             <CommentIcon class="h-4" />
           </template>
         </Button>
+        <!-- HLB-FORK: acknowledge — one click sends the saved acknowledgement
+             as a real Reply (app #85), so the first response is stamped
+             without typing it. The text is the saved reply "Acknowledge";
+             company_helpdesk setup/acknowledge.py sends it. -->
+        <Button
+          variant="ghost"
+          :label="__('Acknowledge')"
+          :loading="acknowledging"
+          @click="acknowledge"
+        >
+          <template #prefix>
+            <LucideCheckCheck class="h-4" />
+          </template>
+        </Button>
         <TypingIndicator :ticketId="ticketId" />
       </div>
     </div>
@@ -114,6 +128,10 @@ import { useScreenSize } from "@/composables/screen";
 import { useShortcut } from "@/composables/shortcuts";
 import { showCommentBox, showEmailBox } from "@/pages/ticket/modalStates";
 import { onClickOutside } from "@vueuse/core";
+// HLB-FORK: acknowledge
+import { __ } from "@/translation";
+import { call, toast } from "frappe-ui";
+import LucideCheckCheck from "~icons/lucide/check-check";
 import { ref, watch } from "vue";
 
 const emit = defineEmits(["update"]);
@@ -145,6 +163,24 @@ function submitEmail() {
   if (emailEditorRef.value.submitMail()) {
     emit("update");
   }
+}
+
+// HLB-FORK: acknowledge — see the button in the template.
+const acknowledging = ref(false);
+function acknowledge() {
+  acknowledging.value = true;
+  call("company_helpdesk.setup.acknowledge.send", { ticket: props.ticketId })
+    .then(() => {
+      toast.success(__("Acknowledgement sent to the requester."));
+      emit("update");
+    })
+    .catch((err: any) => {
+      // frappe-ui rejects with an Error; never hand the object to a toast.
+      toast.error(
+        err?.messages?.[0] || err?.message || __("Could not send it.")
+      );
+    })
+    .finally(() => (acknowledging.value = false));
 }
 
 function submitComment() {
