@@ -17,6 +17,8 @@ import App from "./App.vue";
 import { spritePlugin } from "frappe-ui/experimental";
 import { createDialog } from "./components/dialogs";
 import "./index.css";
+// HLB-FORK: brand-theme — after index.css, so its colours win (#41).
+import "./hlb-theme.css";
 import { router } from "./router";
 import { telemetryPlugin } from "@framework/ui";
 import { isCustomerPortal } from "@/utils";
