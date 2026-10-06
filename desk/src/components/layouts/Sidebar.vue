@@ -36,6 +36,8 @@
           }
         "
       />
+      <!-- HLB-FORK: brand-logo -->
+      <HLBWordmark :is-collapsed="isCollapsed" />
     </template>
   </AppSidebar>
 
@@ -95,6 +97,8 @@ import { HelpIcon } from "frappe-ui/icons";
 import { computed, h, markRaw, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import AppSidebar from "./AppSidebar.vue";
+// HLB-FORK: brand-logo
+import HLBWordmark from "./HLBWordmark.vue";
 import { showShortcutsModal } from "./layoutSettings";
 
 import { useShortcut } from "@/composables/shortcuts";
