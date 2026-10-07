@@ -2,8 +2,9 @@
   <!-- HLB-FORK: brand-logo — the HLB CBS Group South Africa wordmark at the
   foot of the sidebar, on the agent desk and the portal (app #109). Blue on the
   light theme, white on the dark one; both are transparent WebP from marketing.
+  It shares the last row with the collapse button (AppSidebar's `brand` slot).
   Hidden when the sidebar is collapsed: the brand icon at the top stays. -->
-  <div v-if="!isCollapsed" class="px-2 pt-2 select-none">
+  <div v-if="!isCollapsed" class="min-w-0 flex-1 px-2 select-none">
     <img
       :src="logoBlue"
       :alt="__('HLB CBS Group South Africa')"
@@ -31,7 +32,7 @@ defineProps<{ isCollapsed: boolean }>();
 .hlb-wordmark {
   display: block;
   width: 100%;
-  max-width: 10rem;
+  max-width: 9rem;
   height: auto;
 }
 .hlb-wordmark-dark {
