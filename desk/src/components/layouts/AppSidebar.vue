@@ -92,7 +92,26 @@
 
       <div class="mt-auto flex flex-col gap-2">
         <slot name="footer" :is-collapsed="isCollapsed" />
-        <SidebarCollapseToggle v-if="!mobile" />
+        <!-- HLB-FORK: brand-logo — the logo and an icon-only collapse button
+        share the last row (app #109), in place of SidebarCollapseToggle and its
+        "Collapse" label. Collapsed, only the expand button is left. -->
+        <div
+          class="flex items-center gap-1"
+          :class="isCollapsed ? 'justify-center' : 'justify-between'"
+        >
+          <slot name="brand" :is-collapsed="isCollapsed" />
+          <Button
+            v-if="!mobile"
+            variant="ghost"
+            class="shrink-0 !text-ink-gray-7"
+            :icon="
+              isCollapsed ? 'lucide-panel-left-open' : 'lucide-panel-left-close'
+            "
+            :title="isCollapsed ? __('Expand') : __('Collapse')"
+            :aria-label="isCollapsed ? __('Expand') : __('Collapse')"
+            @click="collapsed = !collapsed"
+          />
+        </div>
       </div>
     </div>
   </Sidebar>
@@ -125,7 +144,6 @@ import {
   Dropdown,
   ScrollArea,
   Sidebar,
-  SidebarCollapseToggle,
   SidebarItem,
   SidebarLabel,
 } from "frappe-ui";

@@ -21,18 +21,11 @@
           :isSidebarCollapsed="isCollapsed"
         />
       </div>
-      <SidebarItem
-        v-if="isOnboardingStepsCompleted && !isCustomerPortal"
-        :label="__('Help')"
-        :icon="HelpIcon"
-        :on-click="
-          () => {
-            showHelpModal = minimize ? true : !showHelpModal;
-            minimize = !showHelpModal;
-          }
-        "
-      />
-      <!-- HLB-FORK: brand-logo -->
+      <!-- HLB-FORK: brand-logo — Help moved to the profile menu (app #109),
+      so the foot of the sidebar is the logo alone. -->
+    </template>
+    <!-- HLB-FORK: brand-logo -->
+    <template #brand="{ isCollapsed }">
       <HLBWordmark :is-collapsed="isCollapsed" />
     </template>
   </AppSidebar>
@@ -175,6 +168,17 @@ const agentPortalDropdown = computed(() => [
     label: __("Shortcuts"),
     icon: h(LucideKeyboard),
     onClick: () => (showShortcutsModal.value = true),
+  },
+  // HLB-FORK: brand-logo — Help, moved here from the foot of the sidebar
+  // (app #109). Same behaviour and condition as the sidebar item it replaces.
+  {
+    label: __("Help"),
+    icon: h(HelpIcon),
+    onClick: () => {
+      showHelpModal.value = minimize.value ? true : !showHelpModal.value;
+      minimize.value = !showHelpModal.value;
+    },
+    condition: () => isOnboardingStepsCompleted.value,
   },
   {
     label: __("Settings"),
