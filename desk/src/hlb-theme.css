@@ -32,13 +32,19 @@
   --focus-outline-default: 2px solid #0093a7b3;
 }
 
-/* Dark mode: the greys take a little of the brand's blue, the sidebar is Dark
-   Blue, and the primary colour is Light Blue (HLB Blue is too dark to see on a
-   dark page). Lightness follows frappe-ui's own dark greys, so contrast holds. */
+/* Dark mode: the greys take a little of the brand's blue, and the sidebar is a
+   deep navy darker than Dark Blue (app #109), so HLB Blue shows on it. HLB Blue
+   is the primary colour and the current sidebar item; white text on it is 7.7:1.
+   HLB Blue is only 2.3:1 against the dark page, so a primary button gets a Light
+   Blue edge (4.8:1) to keep its outline visible. Gold, the
+   brand's accent, marks the current sidebar item and its icon, the focus ring
+   and the notification dot, and nothing else.
+   Lightness follows frappe-ui's own dark greys, so contrast holds. */
 [data-theme="dark"] {
-  --hlb-primary: var(--hlb-light-blue);
-  --hlb-primary-hover: #1aa6b8;
-  --hlb-on-primary: #0f1a1f;
+  --hlb-sidebar-dark: #00212c;
+  --hlb-primary: var(--hlb-blue);
+  --hlb-primary-hover: #0a6d8c;
+  --hlb-on-primary: #ffffff;
 
   --surface-base: #0f1a1f;
   --surface-gray-1: #15232a;
@@ -54,9 +60,9 @@
   --outline-gray-4: #46626c;
 
   --ink-blue-link: #4fb8c7;
-  --surface-sidebar: var(--hlb-dark-blue);
-  --focus-default: 0px 0px 0px 3px #0093a7cc;
-  --focus-outline-default: 3px solid #0093a7cc;
+  --surface-sidebar: var(--hlb-sidebar-dark);
+  --focus-default: 0px 0px 0px 2px #fbba00b3;
+  --focus-outline-default: 2px solid #fbba00b3;
 }
 
 /* Primary actions. frappe-ui's solid button and an "on" Switch are
@@ -64,6 +70,9 @@
 button.bg-surface-gray-10 {
   background-color: var(--hlb-primary);
   color: var(--hlb-on-primary);
+}
+[data-theme="dark"] button.bg-surface-gray-10 {
+  box-shadow: inset 0 0 0 1px var(--hlb-light-blue);
 }
 button.bg-surface-gray-10:hover:not(:disabled),
 button.bg-surface-gray-10:active:not(:disabled) {
@@ -83,11 +92,24 @@ input[type="radio"]:checked {
   --surface-gray-2: #005a7714;
 }
 [data-theme="dark"] .bg-surface-sidebar:not(input) {
-  --surface-gray-2: #ffffff14;
-  --surface-elevation-3: #ffffff24;
+  --surface-gray-2: #005a7766;
+  --surface-elevation-3: var(--hlb-blue);
 }
 
 /* The current page in the sidebar: the gold highlight. */
 .bg-surface-sidebar .shadow-sm.bg-surface-elevation-3 {
   box-shadow: inset 3px 0 0 var(--hlb-gold), 0 1px 2px 0 rgba(0, 0, 0, 0.08);
+}
+
+/* Dark mode: the current item's icon and the unread-notifications dot are Gold
+   (app #109). Gold is 9.7:1 on the navy sidebar and 4.4:1 on HLB Blue, above
+   the 3:1 an icon needs. */
+[data-theme="dark"]
+  .bg-surface-sidebar
+  .shadow-sm.bg-surface-elevation-3
+  .place-items-center.text-ink-gray-7 {
+  color: var(--hlb-gold);
+}
+[data-theme="dark"] .bg-surface-sidebar .bg-surface-blue-5 {
+  background-color: var(--hlb-gold);
 }
