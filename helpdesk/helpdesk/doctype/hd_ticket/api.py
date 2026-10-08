@@ -178,33 +178,36 @@ def merge_ticket(source: str, target: str):
     # HLB-FORK: merge-keeps-status — the copies below are history, not new
     # messages. Without this flag each copied inbound email runs the target's
     # on_communication_update, which reopens it onto the default open status
-    # ("Unassigned" here) and bumps last_customer_response. frappe.flags is
-    # per request, so a failure part-way cannot leave it set.
+    # ("Unassigned" here) and bumps last_customer_response. frappe.flags lasts
+    # for a whole request or background job, so clear it even when a copy fails.
     frappe.flags.hd_merge_target = target
+    try:
+        source_comments = frappe.get_all(
+            "Comment",
+            filters={"reference_doctype": "HD Ticket", "reference_name": source},
+            pluck="name",
+        )
+        duplicate_list_retain_timestamp(
+            "Comment", source_comments, target, controller
+        )
 
-    source_comments = frappe.get_all(
-        "Comment",
-        filters={"reference_doctype": "HD Ticket", "reference_name": source},
-        pluck="name",
-    )
-    duplicate_list_retain_timestamp("Comment", source_comments, target, controller)
+        source_communications = frappe.get_all(
+            "Communication",
+            filters={"reference_doctype": "HD Ticket", "reference_name": source},
+            pluck="name",
+        )
+        duplicate_list_retain_timestamp(
+            "Communication", source_communications, target, controller
+        )
 
-    source_communications = frappe.get_all(
-        "Communication",
-        filters={"reference_doctype": "HD Ticket", "reference_name": source},
-        pluck="name",
-    )
-    duplicate_list_retain_timestamp(
-        "Communication", source_communications, target, controller
-    )
-
-    source_attachments = frappe.get_all(
-        "File",
-        filters={"attached_to_doctype": "HD Ticket", "attached_to_name": source},
-        pluck="name",
-    )
-    duplicate_list_retain_timestamp("File", source_attachments, target, controller)
-    frappe.flags.hd_merge_target = None
+        source_attachments = frappe.get_all(
+            "File",
+            filters={"attached_to_doctype": "HD Ticket", "attached_to_name": source},
+            pluck="name",
+        )
+        duplicate_list_retain_timestamp("File", source_attachments, target, controller)
+    finally:
+        frappe.flags.hd_merge_target = None
 
     doc = frappe.get_doc("HD Ticket", source)
 
