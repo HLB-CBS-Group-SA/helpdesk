@@ -3,11 +3,17 @@
        One column per open status. A card moves to another status by drag,
        or from its menu. Finished tickets (status category Resolved) are not
        shown. Each agent picks which columns show, and their order, under
-       "Columns" (#93); the choice is kept in this browser. -->
+       "Columns" (#93); the choice is kept in this browser.
+       Opened from a saved view (`?view=`), the board also applies that view's
+       filters and shows its name: the seeded private view "My tasks" is this
+       board for Personal Tasks only, and can be pinned to the sidebar like any
+       private view (app #81). Each view keeps its own column choice. -->
   <div class="flex flex-col h-full">
     <LayoutHeader>
       <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("My board") }}</div>
+        <div class="text-lg-medium text-ink-gray-9">
+          {{ boardView?.label || __("My board") }}
+        </div>
       </template>
       <template #right-header>
         <NestedPopover placement="bottom-end">
@@ -163,8 +169,9 @@ import {
   toast,
 } from "frappe-ui";
 import { storeToRefs } from "pinia";
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useView } from "@/composables/useView";
+import { computed, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import Draggable from "vuedraggable";
 
 type BoardTicket = {
@@ -176,7 +183,9 @@ type BoardTicket = {
 };
 
 const router = useRouter();
+const route = useRoute();
 const { userId } = storeToRefs(useAuthStore());
+const { views } = useView("HD Ticket");
 const ticketStatusStore = useTicketStatusStore();
 
 const dragged = ref<string | null>(null);
@@ -192,19 +201,41 @@ const openStatuses = computed<HDTicketStatus[]>(
     ) || []
 );
 
+// The saved view the board was opened from, if any. The views resource has
+// already parsed its `filters` into an object (useView.ts).
+const viewName = computed(() => (route.query.view as string) || "");
+const boardView = computed(() =>
+  viewName.value
+    ? views.data?.find((v: { name: string }) => v.name === viewName.value)
+    : null
+);
+
 // `_assign` holds a JSON list of user ids; the list filter matches it with
-// `like`, the same way the ticket list's "Assigned to" filter does.
+// `like`, the same way the ticket list's "Assigned to" filter does. A view's
+// filters narrow the board; they never widen it, because the board's own two
+// conditions are applied last.
+const boardFilters = computed(() => ({
+  ...(boardView.value?.filters || {}),
+  _assign: ["like", `%${userId.value}%`],
+  status_category: ["!=", "Resolved"],
+}));
 const tickets = createListResource({
   doctype: "HD Ticket",
   fields: ["name", "subject", "status", "priority", "raised_by"],
-  filters: computed(() => ({
-    _assign: ["like", `%${userId.value}%`],
-    status_category: ["!=", "Resolved"],
-  })),
+  filters: boardFilters,
   orderBy: "modified desc",
   pageLength: 500,
-  auto: true,
 });
+// A list resource reads its filters only when it fetches, so load explicitly:
+// once the view (if any) has loaded, and again when the filters change, such
+// as when moving between My board and a view of it. Waiting for the views
+// keeps the unfiltered board from showing first.
+watch(
+  () =>
+    viewName.value && !views.data ? null : JSON.stringify(boardFilters.value),
+  (key) => key && tickets.reload(),
+  { immediate: true }
+);
 
 // ---- which columns show, and in what order (#93), per agent, in this browser.
 // Until an agent chooses, the board uses the order the team agreed. A status
@@ -224,7 +255,9 @@ const DEFAULT_ORDER = [
 const DEFAULT_HIDDEN = ["Unassigned"];
 
 const boardSettings = useStorage<{ order: string[]; hidden: string[] }>(
-  `hlb-my-board-columns:${userId.value}`,
+  () =>
+    `hlb-my-board-columns:${userId.value}` +
+    (viewName.value ? `:${viewName.value}` : ""),
   { order: [], hidden: [...DEFAULT_HIDDEN] },
   localStorage,
   { mergeDefaults: true }
