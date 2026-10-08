@@ -318,7 +318,8 @@ const EDITOR_HINTS: Record<string, string> = {
   "New software request":
     "Please provide as much detail as possible and upload the business case below.",
   Onboarding:
-    "Please include: job title, certifications (e.g. CA(SA), RA, CISA), mobile number, and any special requests.",
+    // Job title and cell phone are form fields again (app #119).
+    "Please include: certifications (e.g. CA(SA), RA, CISA), and any special requests.",
   Offboarding: "Provide specific instructions e.g. Email forwarding address.",
 };
 
