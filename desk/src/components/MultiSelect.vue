@@ -75,8 +75,12 @@ function labelFor(value: string): string {
   return (props.options || []).find((o) => o.value === value)?.label || value;
 }
 
+// Emits the joined string itself, never { value }: UniInput reads a change as
+// `$event.target?.value || $event.value || $event`, so removing the LAST chip
+// ({ value: "" }, falsy) stored the whole object instead of "", and the field
+// vanished from the form (app #119).
 function commit(values: string[]): void {
-  emit("change", { value: values.join(SEPARATOR) });
+  emit("change", values.join(SEPARATOR));
 }
 
 function add(option: Option | string | null): void {
