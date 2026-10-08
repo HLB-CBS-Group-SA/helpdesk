@@ -137,6 +137,13 @@
           class="shadow"
         />
         <div v-if="isCustomerPortal">
+          <!-- HLB-FORK: additional-requirements -->
+          <AdditionalRequirements
+            v-if="asksAdditional"
+            class="mb-5"
+            :model-value="additional"
+            @update:model-value="setAdditional"
+          />
           <h4
             v-show="subject.length <= 2 && description.length === 0"
             class="text-p-sm text-ink-gray-4 ms-1"
@@ -171,6 +178,13 @@
 
       <!-- for agent portal -->
       <div v-if="!isCustomerPortal">
+        <!-- HLB-FORK: additional-requirements -->
+        <AdditionalRequirements
+          v-if="asksAdditional"
+          class="mb-5"
+          :model-value="additional"
+          @update:model-value="setAdditional"
+        />
         <TicketTextEditor
           ref="editor"
           v-model:attachments="attachments"
@@ -233,6 +247,8 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import SearchArticles from "../../components/SearchArticles.vue";
+// HLB-FORK: additional-requirements
+import AdditionalRequirements from "../../components/ticket/AdditionalRequirements.vue";
 import ProcurementForm from "../../components/ticket/ProcurementForm.vue";
 const TicketTextEditor = defineAsyncComponent(
   () => import("./TicketTextEditor.vue")
@@ -354,6 +370,33 @@ const currentSubtype = computed<string>(() => {
 // sentence there just trains people to type "n/a".
 // See customisations.manifest.json id=ui-optional-body.
 const OPTIONAL_BODY = new Set(["Offboarding"]);
+
+// HLB-FORK: additional-requirements — the ticket types that ask "Are there
+// any additional requirements?" (app #119). No fills the body with a sentence
+// that says so; Yes takes that sentence out again if it is still untouched, so
+// the requester writes their own. Changing to a type that does not ask clears
+// the answer the same way.
+// See customisations.manifest.json id=ui-additional-requirements.
+const ASKS_ADDITIONAL = new Set(["HR Onboarding / Offboarding"]);
+const NO_ADDITIONAL = `<p>${__("No additional requirements")}</p>`;
+const additional = ref<"" | "Yes" | "No">("");
+const asksAdditional = computed(() =>
+  ASKS_ADDITIONAL.has(
+    (templateFields as Record<string, string>)["ticket_type"]
+  )
+);
+
+function setAdditional(answer: "Yes" | "No") {
+  additional.value = answer;
+  if (answer === "No") description.value = NO_ADDITIONAL;
+  else if (description.value === NO_ADDITIONAL) description.value = "";
+}
+
+watch(asksAdditional, (asks) => {
+  if (asks) return;
+  additional.value = "";
+  if (description.value === NO_ADDITIONAL) description.value = "";
+});
 
 const bodyRequired = computed(
   () => !OPTIONAL_BODY.has(currentSubtype.value) && !isProcurement.value
