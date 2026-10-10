@@ -169,6 +169,30 @@
       </div>
     </div>
 
+    <!-- Load payment: the final approver records the receipt review (C-01).
+         Downloading writes nothing (a GET is rolled back); this POST does. -->
+    <div
+      v-if="can.record_review"
+      class="flex flex-col gap-2 rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
+    >
+      <p class="text-p-sm text-ink-gray-8">
+        {{
+          __(
+            "Download the receipt and check it. Then confirm, so the request can be concluded and sent to Creditors."
+          )
+        }}
+      </p>
+      <div>
+        <Button
+          variant="solid"
+          :label="__('I have reviewed the receipt')"
+          icon-left="lucide-check"
+          :loading="busy"
+          @click="run('record_receipt_review')"
+        />
+      </div>
+    </div>
+
     <!-- Load payment: conclude -->
     <div v-if="can.conclude" class="flex flex-col gap-2">
       <div class="flex flex-wrap items-end gap-2">
@@ -192,7 +216,7 @@
       <p v-if="!ctx.receipt_ready" class="text-p-sm text-ink-gray-6">
         {{
           __(
-            "{0} must download the receipt before the request is concluded. It is then emailed to Creditors.",
+            "{0} must review the receipt before the request is concluded. It is then emailed to Creditors.",
             ctx.final_approver_name || __("The final approver")
           )
         }}
@@ -291,6 +315,7 @@ const METHODS = [
   "resend_director_link",
   "send_to_authoriser",
   "authorise",
+  "record_receipt_review",
   "conclude",
 ];
 const steps = Object.fromEntries(
@@ -325,8 +350,6 @@ function downloadReceipt() {
     props.ticketId
   )}`;
   window.open(url, "_blank");
-  // The server stamps the final approver's download; show it once it has.
-  setTimeout(() => context.reload(), 3000);
 }
 
 function formatWhen(value: string) {

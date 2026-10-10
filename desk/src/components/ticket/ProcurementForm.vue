@@ -67,6 +67,15 @@
               @update:model-value="(v) => set(name, v)"
               @change="(v) => set(name, v?.target?.value ?? v?.value ?? v)"
             />
+            <!-- Only the Entra Directors group (HLB Director) may be the
+                 Requesting Director; the server refuses anyone else (SI-03). -->
+            <FormControl
+              v-else-if="name === 'pr_director'"
+              type="select"
+              :options="directorOptions"
+              :model-value="doc[name]"
+              @update:model-value="(v) => set(name, v)"
+            />
             <Link
               v-else-if="meta[name]?.fieldtype === 'Link'"
               :doctype="meta[name].options"
@@ -664,6 +673,17 @@ const lateBy = computed<number>(() => {
   }
   return days < needed ? needed : 0;
 });
+
+// ---- the Requesting Director: the Entra Directors group, from the server (SI-03).
+const directors = createResource({
+  url: "company_helpdesk.procurement_api.directors",
+  method: "GET",
+  auto: true,
+});
+const directorOptions = computed(() => [
+  { label: __("Choose the Director"), value: "" },
+  ...(directors.data || []),
+]);
 
 // ---- the creditors run (#92). A request fully approved by the month's
 // accounts cut-off (site config, the 25th by default) goes with that month's

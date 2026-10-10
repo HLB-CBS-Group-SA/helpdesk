@@ -117,12 +117,14 @@ const sign = createResource({
 });
 
 function submit() {
-  if (!signature.value) return;
+  if (!signature.value || !confirmed.value) return;
   sign.submit({
     ticket: props.ticketId,
     image: signature.value.image,
     method: signature.value.method,
     typed_name: signature.value.typed_name,
+    // The server refuses a signature without the confirmation (U-09).
+    confirmed: 1,
   });
 }
 
