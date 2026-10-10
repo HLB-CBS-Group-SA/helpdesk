@@ -76,6 +76,17 @@
         />
       </template>
     </LayoutHeader>
+    <div
+      v-if="truncated"
+      class="border-b border-outline-gray-2 px-4 py-2 text-sm text-ink-gray-6"
+    >
+      {{
+        __(
+          "Showing the first {0} tickets. Narrow the board with a saved view to see the rest.",
+          [PAGE_LENGTH]
+        )
+      }}
+    </div>
     <div class="flex-1 overflow-x-auto overflow-y-hidden">
       <div class="flex h-full gap-3 p-3 md:p-4 w-max">
         <div
@@ -210,13 +221,14 @@ const boardView = computed(() =>
     : null
 );
 
-// `_assign` holds a JSON list of user ids; the list filter matches it with
-// `like`, the same way the ticket list's "Assigned to" filter does. A view's
-// filters narrow the board; they never widen it, because the board's own two
-// conditions are applied last.
+// `_assign` holds a JSON list of user ids, so match the id with its quotes:
+// unquoted, ann@ would also match joann@ (C-06). A view's filters narrow the
+// board; they never widen it, because the board's own two conditions are
+// applied last.
+const PAGE_LENGTH = 500;
 const boardFilters = computed(() => ({
   ...(boardView.value?.filters || {}),
-  _assign: ["like", `%${userId.value}%`],
+  _assign: ["like", `%"${userId.value}"%`],
   status_category: ["!=", "Resolved"],
 }));
 const tickets = createListResource({
@@ -224,8 +236,12 @@ const tickets = createListResource({
   fields: ["name", "subject", "status", "priority", "raised_by"],
   filters: boardFilters,
   orderBy: "modified desc",
-  pageLength: 500,
+  pageLength: PAGE_LENGTH,
 });
+// A full page means there may be more; say so rather than hide them silently.
+const truncated = computed(
+  () => (tickets.data?.length || 0) >= PAGE_LENGTH
+);
 // A list resource reads its filters only when it fetches, so load explicitly:
 // once the view (if any) has loaded, and again when the filters change, such
 // as when moving between My board and a view of it. Waiting for the views
