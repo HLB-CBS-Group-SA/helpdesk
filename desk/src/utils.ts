@@ -952,3 +952,9 @@ export function handleInviteUserSuccess(
     toast.info(`${emailsStr} already present`);
   }
 }
+
+// HLB-FORK: error-text — frappe-ui rejects with an Error whose server message
+// sits in `messages`. Never hand the object itself to a toast or a template.
+export function errorText(error: any, fallback: string): string {
+  return error?.messages?.[0] || error?.message || fallback;
+}

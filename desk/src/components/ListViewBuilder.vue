@@ -161,7 +161,7 @@
         :disabled="deleteReason.loading"
         @keydown.enter.meta="confirmTicketDelete"
       />
-      <p v-if="deleteReason.error" class="text-p-sm text-ink-red-3 mt-2">
+      <p v-if="deleteReason.error" class="text-p-sm text-ink-red-7 mt-2">
         {{ deleteReason.error }}
       </p>
     </template>
@@ -200,6 +200,8 @@ import { globalStore } from "@/stores/globalStore";
 import { capture } from "@/telemetry";
 import { View, ViewType } from "@/types";
 import { formatTimeShort, getIcon } from "@/utils";
+// HLB-FORK: error-text
+import { errorText } from "@/utils";
 import { useStorage } from "@vueuse/core";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
@@ -391,8 +393,7 @@ function confirmTicketDelete() {
       reload();
     })
     .catch((error: any) => {
-      deleteReason.error =
-        error?.messages?.[0] || error?.message || __("Could not delete.");
+      deleteReason.error = errorText(error, __("Could not delete."));
     })
     .finally(() => {
       deleteReason.loading = false;

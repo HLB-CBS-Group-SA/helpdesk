@@ -382,9 +382,7 @@ const ASKS_ADDITIONAL = new Set(["HR Onboarding / Offboarding"]);
 const NO_ADDITIONAL = `<p>${__("No additional requirements")}</p>`;
 const additional = ref<"" | "Yes" | "No">("");
 const asksAdditional = computed(() =>
-  ASKS_ADDITIONAL.has(
-    (templateFields as Record<string, string>)["ticket_type"]
-  )
+  ASKS_ADDITIONAL.has((templateFields as Record<string, string>)["ticket_type"])
 );
 
 function setAdditional(answer: "Yes" | "No") {

@@ -20,7 +20,7 @@
       :modelValue="typedName"
       @update:modelValue="typeName"
     />
-    <div class="relative rounded border border-outline-gray-3 bg-surface-white">
+    <div class="relative rounded border border-outline-gray-3 bg-surface-base">
       <canvas
         ref="canvas"
         class="block w-full touch-none"
@@ -73,6 +73,9 @@ const emit = defineEmits<{
 
 const HEIGHT = 140;
 const INK = "#1f2328";
+// The PNG is a paper record: the canvas paints its own white sheet, so the
+// signature stays legible in dark mode, in the PDF and on the signature list.
+const PAPER = "#ffffff";
 const canvas = ref<HTMLCanvasElement>();
 const method = ref<"Drawn" | "Typed">("Drawn");
 const typedName = ref("");
@@ -99,9 +102,15 @@ function resize() {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.strokeStyle = INK;
-  ctx.fillStyle = INK;
+  paper(ctx, el);
 }
 onMounted(resize);
+
+function paper(ctx: CanvasRenderingContext2D, el: HTMLCanvasElement) {
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, 0, el.width, el.height);
+  ctx.fillStyle = INK;
+}
 
 function point(e: PointerEvent) {
   const rect = canvas.value!.getBoundingClientRect();
@@ -140,7 +149,7 @@ function stop() {
 function wipe() {
   const el = canvas.value;
   const ctx = context();
-  if (el && ctx) ctx.clearRect(0, 0, el.width, el.height);
+  if (el && ctx) paper(ctx, el);
   empty.value = true;
 }
 

@@ -36,7 +36,7 @@
           :srcdoc="ctx.html"
           sandbox=""
           :title="__('The request')"
-          class="h-[60vh] w-full rounded border border-outline-gray-2 bg-surface-white"
+          class="h-[60vh] w-full rounded border border-outline-gray-2 bg-surface-base"
         />
 
         <div
@@ -86,6 +86,7 @@ import SignaturePad, {
   type Signature,
 } from "@/components/ticket/SignaturePad.vue";
 import { __ } from "@/translation";
+import { errorText } from "@/utils";
 import { Button, createResource, FormControl, toast } from "frappe-ui";
 import { computed, ref } from "vue";
 
@@ -109,10 +110,7 @@ const sign = createResource({
     toast.success(__("Signed. Thank you."));
   },
   onError(error: any) {
-    // frappe-ui rejects with an Error; never hand the object to a toast.
-    toast.error(
-      error?.messages?.[0] || error?.message || __("That did not work.")
-    );
+    toast.error(errorText(error, __("That did not work.")));
   },
 });
 
