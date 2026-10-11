@@ -976,3 +976,9 @@ export function splitPlacement(placement?: string) {
   const [side = "bottom", align = "center"] = (placement || "").split("-");
   return { side, align } as { side: any; align: any };
 }
+
+// HLB-FORK: error-text — frappe-ui rejects with an Error whose server message
+// sits in `messages`. Never hand the object itself to a toast or a template.
+export function errorText(error: any, fallback: string): string {
+  return error?.messages?.[0] || error?.message || fallback;
+}

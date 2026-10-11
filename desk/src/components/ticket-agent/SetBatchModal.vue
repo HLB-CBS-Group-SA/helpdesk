@@ -61,6 +61,7 @@
 <script setup lang="ts">
 import { Link } from "@/components";
 import { __ } from "@/translation";
+import { errorText } from "@/utils";
 import { call, createResource, Dialog, toast } from "frappe-ui";
 import { ref } from "vue";
 
@@ -93,7 +94,7 @@ const setBatch = createResource({
     emit("success");
   },
   onError: (error: any) => {
-    toast.error(error?.messages?.[0] || __("Could not set the batch"));
+    toast.error(errorText(error, __("Could not set the batch")));
   },
 });
 
@@ -112,7 +113,7 @@ async function handleCreate(value: string, close: Function) {
     batch.value = doc.name;
     close();
   } catch (error: any) {
-    toast.error(error?.messages?.[0] || __("Could not create the batch"));
+    toast.error(errorText(error, __("Could not create the batch")));
   }
 }
 

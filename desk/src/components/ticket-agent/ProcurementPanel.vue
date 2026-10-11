@@ -55,7 +55,7 @@
           v-if="s.image"
           :src="s.image"
           :alt="__('Signature of {0}', s.signer_name)"
-          class="h-10 w-32 shrink-0 object-contain bg-surface-white"
+          class="h-10 w-32 shrink-0 object-contain bg-surface-base"
         />
         <div class="min-w-0 flex-1 text-p-sm">
           <div class="text-ink-gray-8">
@@ -227,6 +227,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import { errorText } from "@/utils";
 import { Button, createResource, dayjs, FormControl, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideCheck from "~icons/lucide/check";
@@ -331,10 +332,7 @@ const steps = Object.fromEntries(
         emit("changed");
       },
       onError(error: any) {
-        // frappe-ui rejects with an Error; never hand the object to a toast.
-        toast.error(
-          error?.messages?.[0] || error?.message || __("That did not work.")
-        );
+        toast.error(errorText(error, __("That did not work.")));
       },
     }),
   ])

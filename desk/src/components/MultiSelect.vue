@@ -26,7 +26,7 @@
         @click="remove(value)"
       >
         <span>{{ labelFor(value) }}</span>
-        <FeatherIcon name="x" class="h-3 w-3" />
+        <LucideX class="size-3" aria-hidden="true" />
       </button>
     </div>
   </div>
@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import { Autocomplete } from "@/components";
-import { FeatherIcon } from "frappe-ui";
+import LucideX from "~icons/lucide/x";
 import { computed } from "vue";
 
 interface Option {

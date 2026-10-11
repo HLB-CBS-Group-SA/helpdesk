@@ -38,5 +38,7 @@ const OPTIONS: Answer[] = ["Yes", "No"];
 
 defineProps<{ modelValue: Answer | "" }>();
 
-const emit = defineEmits<{ (event: "update:modelValue", value: Answer): void }>();
+const emit = defineEmits<{
+  (event: "update:modelValue", value: Answer): void;
+}>();
 </script>

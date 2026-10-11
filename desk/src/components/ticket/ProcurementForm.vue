@@ -189,7 +189,7 @@ import { Link } from "@/components";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Field } from "@/types";
-import { uploadFunction } from "@/utils";
+import { errorText, uploadFunction } from "@/utils";
 import {
   Button,
   createResource,
@@ -548,10 +548,7 @@ function periodsShown(): string {
   if (!frequency || frequency === "Once-off") return __("once-off");
   const n = periods();
   const unit = frequency === PER_USAGE ? "Monthly" : frequency;
-  const [one, many] = PERIOD_LABELS[unit] || [
-    "1 payment",
-    "{0} payments",
-  ];
+  const [one, many] = PERIOD_LABELS[unit] || ["1 payment", "{0} payments"];
   return n === 1 ? __(one) : __(many, n);
 }
 // "Excluding VAT (Monthly)": the amount is per period of a regular frequency.
@@ -782,8 +779,7 @@ async function pick(event: Event, done: (f: UploadedFile) => void) {
     try {
       done((await uploadFunction(file)) as UploadedFile);
     } catch (err: any) {
-      // frappe-ui rejects with an Error; never hand the object to a toast.
-      toast.error(err?.messages?.[0] || err?.message || __("Upload failed"));
+      toast.error(errorText(err, __("Upload failed")));
     } finally {
       uploading.value -= 1;
     }

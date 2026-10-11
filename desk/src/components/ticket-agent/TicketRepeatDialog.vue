@@ -4,7 +4,10 @@
      that the agent may change this ticket, so nobody needs Desk or rights on
      Auto Repeat. The ticket itself stays as it is: each copy is a new ticket. -->
 <template>
-  <Dialog v-model="show" :options="{ title: __('Repeat ticket #{0}', [ticket]) }">
+  <Dialog
+    v-model="show"
+    :options="{ title: __('Repeat ticket #{0}', [ticket]) }"
+  >
     <template #body-content>
       <p class="text-p-sm text-ink-gray-6 mb-4">
         {{
@@ -37,7 +40,7 @@
       >
         {{ __("Next copy: {0}", [repeat.data.next_schedule_date]) }}
       </p>
-      <p v-if="error" class="text-p-sm text-ink-red-3 mt-2">{{ error }}</p>
+      <p v-if="error" class="text-p-sm text-ink-red-7 mt-2">{{ error }}</p>
     </template>
     <template #actions>
       <div class="flex w-full gap-2">
@@ -64,6 +67,7 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
+import { errorText } from "@/utils";
 import {
   Button,
   call,
@@ -107,11 +111,6 @@ watch(show, (open) => {
   error.value = "";
   repeat.reload();
 });
-
-function errorText(err: any, fallback: string): string {
-  // frappe-ui rejects with an Error; never hand the object to a toast.
-  return err?.messages?.[0] || err?.message || fallback;
-}
 
 function save() {
   saving.value = true;

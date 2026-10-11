@@ -117,7 +117,7 @@
         :label="__('Reason')"
         :disabled="ticket.setValue.loading"
       />
-      <p v-if="cancelDialog.error" class="text-p-sm text-ink-red-3 mt-2">
+      <p v-if="cancelDialog.error" class="text-p-sm text-ink-red-7 mt-2">
         {{ cancelDialog.error }}
       </p>
     </template>
@@ -159,7 +159,7 @@
         :placeholder="__('e.g. Spam received by email / duplicate of #0123')"
         :disabled="deleteDialog.loading"
       />
-      <p v-if="deleteDialog.error" class="text-p-sm text-ink-red-3 mt-2">
+      <p v-if="deleteDialog.error" class="text-p-sm text-ink-red-7 mt-2">
         {{ deleteDialog.error }}
       </p>
     </template>
@@ -201,6 +201,8 @@ import { __ } from "@/translation";
 import { CustomizationSymbol, TicketSymbol, View } from "@/types";
 import { HDTicketStatus } from "@/types/doctypes";
 import { getIcon } from "@/utils";
+// HLB-FORK: error-text
+import { errorText } from "@/utils";
 import {
   Breadcrumbs,
   Button,
@@ -382,12 +384,6 @@ function handleDeleteTicket() {
   deleteDialog.error = "";
   deleteDialog.loading = false;
   deleteDialog.show = true;
-}
-
-function errorText(error: any, fallback: string): string {
-  // frappe-ui rejects with an Error whose server message sits in `messages`;
-  // never hand the object itself to a toast or a template.
-  return error?.messages?.[0] || error?.message || fallback;
 }
 
 function confirmDelete() {
