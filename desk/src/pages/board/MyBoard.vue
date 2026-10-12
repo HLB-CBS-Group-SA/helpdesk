@@ -26,7 +26,7 @@
           </template>
           <template #body>
             <div
-              class="my-2 p-1.5 min-w-56 rounded-lg bg-surface-elevation-2 shadow-2xl ring-1 ring-black ring-opacity-5"
+              class="my-2 p-1.5 min-w-56 rounded-lg bg-surface-elevation-2 shadow-2xl ring-1 ring-outline-elevation-2"
             >
               <Draggable
                 :model-value="settingsRows"
@@ -92,7 +92,7 @@
         <div
           v-for="column in columns"
           :key="column.status"
-          class="flex flex-col w-72 shrink-0 rounded-lg bg-surface-gray-2"
+          class="flex flex-col w-72 shrink-0 rounded-lg bg-surface-gray-1"
           :class="{ 'ring-2 ring-outline-gray-4': dragOver === column.status }"
           @dragover.prevent="dragOver = column.status"
           @dragleave="dragOver = null"
@@ -112,7 +112,7 @@
               v-for="t in column.tickets"
               :key="t.name"
               draggable="true"
-              class="group rounded-md bg-surface-white p-2.5 shadow-sm cursor-pointer hover:ring-1 hover:ring-outline-gray-3"
+              class="group rounded-md border border-outline-gray-1 bg-surface-elevation-1 p-2.5 shadow-sm cursor-pointer hover:ring-1 hover:ring-outline-gray-3"
               @dragstart="dragged = t.name"
               @dragend="dragged = null"
               @click="openTicket(t.name)"
@@ -169,7 +169,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
 import { HDTicketStatus } from "@/types/doctypes";
-import { isTouchScreenDevice } from "@/utils";
+import { errorText, isTouchScreenDevice } from "@/utils";
 import { useStorage } from "@vueuse/core";
 import {
   Button,
@@ -239,9 +239,7 @@ const tickets = createListResource({
   pageLength: PAGE_LENGTH,
 });
 // A full page means there may be more; say so rather than hide them silently.
-const truncated = computed(
-  () => (tickets.data?.length || 0) >= PAGE_LENGTH
-);
+const truncated = computed(() => (tickets.data?.length || 0) >= PAGE_LENGTH);
 // A list resource reads its filters only when it fetches, so load explicitly:
 // once the view (if any) has loaded, and again when the filters change, such
 // as when moving between My board and a view of it. Waiting for the views
@@ -345,10 +343,7 @@ const setStatus = createResource({
     tickets.reload();
   },
   onError(error: any) {
-    // frappe-ui rejects with an Error; never hand the object to a toast.
-    toast.error(
-      error?.messages?.[0] || error?.message || __("Could not move the ticket.")
-    );
+    toast.error(errorText(error, __("Could not move the ticket.")));
     tickets.reload();
   },
 });

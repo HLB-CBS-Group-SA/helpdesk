@@ -132,6 +132,8 @@ import { onClickOutside } from "@vueuse/core";
 import { __ } from "@/translation";
 import { call, toast } from "frappe-ui";
 import LucideCheckCheck from "~icons/lucide/check-check";
+// HLB-FORK: error-text
+import { errorText } from "@/utils";
 import { ref, watch } from "vue";
 
 const emit = defineEmits(["update"]);
@@ -175,10 +177,7 @@ function acknowledge() {
       emit("update");
     })
     .catch((err: any) => {
-      // frappe-ui rejects with an Error; never hand the object to a toast.
-      toast.error(
-        err?.messages?.[0] || err?.message || __("Could not send it.")
-      );
+      toast.error(errorText(err, __("Could not send it.")));
     })
     .finally(() => (acknowledging.value = false));
 }
