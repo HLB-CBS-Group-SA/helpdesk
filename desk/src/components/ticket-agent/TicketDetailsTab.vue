@@ -374,6 +374,8 @@ function getFieldInFormat(fieldTemplate, fieldMeta) {
     disabled: Boolean(fieldMeta.read_only),
     url_method: fieldTemplate.url_method || "",
     fieldname: fieldTemplate.fieldname,
+    // HLB-FORK: multi-select — TicketField shows every chosen item (app #119).
+    hlb_multiple: fieldTemplate.hlb_multiple,
     required: fieldTemplate.required || fieldMeta?.required || false,
     visible:
       fieldMeta.display_via_depends_on &&

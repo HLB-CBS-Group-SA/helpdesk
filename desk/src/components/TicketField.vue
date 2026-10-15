@@ -23,6 +23,8 @@
 
 <script setup lang="ts">
 import { Autocomplete } from "@/components";
+// HLB-FORK: multi-select
+import { MultiSelect } from "@/components";
 import FieldLabel from "@/components/FieldLabel.vue";
 import TicketPriority from "@/components/TicketPriority.vue";
 import { APIOptions, Field, FieldValue } from "@/types";
@@ -127,7 +129,20 @@ function combobox(options: Option[]) {
 }
 
 const component = computed(() => {
-  if (props.field.url_method) {
+  // HLB-FORK: multi-select — before url_method, as on the intake form, so the
+  // agent view shows every chosen item, not one Autocomplete value (app #119).
+  if (props.field.hlb_multiple) {
+    return h(MultiSelect, {
+      value: props.value,
+      options: props.field.url_method
+        ? apiOptions.data
+        : (props.field.options || "")
+            .split("\n")
+            .filter(Boolean)
+            .map((o: string) => ({ label: o, value: o })),
+      onChange: (value: string) => emitUpdate(props.field.fieldname, value),
+    });
+  } else if (props.field.url_method) {
     return h(Autocomplete, {
       options: apiOptions.data,
     });
@@ -194,6 +209,8 @@ let linkPickerOpen = false;
 let linkModel: FieldValue = null;
 
 const listeners = computed(() => {
+  // HLB-FORK: multi-select — MultiSelect commits through its own onChange.
+  if (props.field.hlb_multiple) return {};
   const fieldtype = props.field.fieldtype;
   if ([...textFields, ...numberFields].includes(fieldtype)) {
     return {
