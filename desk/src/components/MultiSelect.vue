@@ -22,11 +22,13 @@
         v-for="value in selected"
         :key="value"
         type="button"
-        class="flex items-center gap-1 rounded bg-surface-gray-2 px-2 py-1 text-p-sm text-ink-gray-7 hover:bg-surface-gray-3"
+        class="flex max-w-full items-center gap-1 rounded bg-surface-gray-2 px-2 py-1 text-left text-p-sm text-ink-gray-7 hover:bg-surface-gray-3"
         @click="remove(value)"
       >
-        <span>{{ labelFor(value) }}</span>
-        <LucideX class="size-3" aria-hidden="true" />
+        <!-- HLB-FORK: multi-select — a long "Name <address>" wraps inside its
+             chip, left-aligned, instead of centring and overflowing the field. -->
+        <span class="min-w-0 break-words">{{ labelFor(value) }}</span>
+        <LucideX class="size-3 shrink-0" aria-hidden="true" />
       </button>
     </div>
   </div>
