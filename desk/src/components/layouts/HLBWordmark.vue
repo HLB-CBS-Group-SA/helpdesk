@@ -3,8 +3,10 @@
   foot of the sidebar, on the agent desk and the portal (app #109). Blue on the
   light theme, white on the dark one; both are transparent WebP from marketing.
   It shares the last row with the collapse button (AppSidebar's `brand` slot).
-  Hidden when the sidebar is collapsed: the brand icon at the top stays. -->
-  <div v-if="!isCollapsed" class="min-w-0 flex-1 px-2 select-none">
+  Hidden when the sidebar is collapsed: the brand icon at the top stays.
+  pb-2 matches px-2: the logo is taller than the row's button, so without it
+  the gap below the logo is half the gap to its left. -->
+  <div v-if="!isCollapsed" class="min-w-0 flex-1 px-2 pb-2 select-none">
     <img
       :src="logoBlue"
       :alt="__('HLB CBS Group South Africa')"
