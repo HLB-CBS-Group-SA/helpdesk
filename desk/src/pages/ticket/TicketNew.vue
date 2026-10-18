@@ -20,13 +20,16 @@
         <div class="prose-f" v-html="sanitize(template.data.about)" />
       </div>
       <!-- custom fields -->
+      <!-- HLB-FORK: multi-select — a pick-several field takes the whole row;
+           row-dense lets the next short field fill the gap it leaves. -->
       <div
-        class="grid grid-cols-1 gap-4 sm:grid-cols-3"
+        class="grid grid-cols-1 gap-4 sm:grid-cols-3 grid-flow-row-dense"
         v-if="Boolean(visibleFields)"
       >
         <UniInput
           v-for="field in genericFields"
           :key="field.fieldname"
+          :class="field.hlb_multiple && 'sm:col-span-3'"
           :field="field"
           :value="templateFields[field.fieldname]"
           @change="

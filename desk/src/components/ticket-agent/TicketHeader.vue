@@ -134,6 +134,42 @@
     </template>
   </Dialog>
 
+  <!-- HLB-FORK: close-comment — closing asks what was done; the server refuses
+       a close without it (app hd_ticket/closing.py, manifest ui-close-comment). -->
+  <Dialog
+    v-model="closeDialog.show"
+    :options="{ title: __('Close ticket #{0}', [ticket?.doc?.name]) }"
+  >
+    <template #body-content>
+      <p class="text-p-sm text-ink-gray-6 mb-3">
+        {{
+          __(
+            "Say what was done. The comment is kept on the ticket as an internal comment."
+          )
+        }}
+      </p>
+      <FormControl
+        v-model="closeDialog.comment"
+        type="textarea"
+        :label="__('Closing comment')"
+        :disabled="closeWithComment.loading"
+      />
+      <p v-if="closeDialog.error" class="text-p-sm text-ink-red-7 mt-2">
+        {{ closeDialog.error }}
+      </p>
+    </template>
+    <template #actions>
+      <Button
+        class="w-full"
+        variant="solid"
+        :loading="closeWithComment.loading"
+        :disabled="closeDialog.comment.trim().length < closeMinLength"
+        :label="__('Close ticket')"
+        @click="confirmClose"
+      />
+    </template>
+  </Dialog>
+
   <!-- HLB-FORK: delete-reason — the single-ticket Delete asks why, like the
        list's bulk Delete does, and goes through the same endpoint. Upstream's
        plain confirm called helpdesk.api.ticket.delete_ticket, which
@@ -295,6 +331,41 @@ function confirmCancel() {
   );
 }
 
+// HLB-FORK: close-comment — whether to ask, the status name and the minimum
+// length all come from cancelContext, so the rule lives on the server only.
+const closedStatus = computed(() => cancelContext.data?.closed_status);
+const closeMinLength = computed(
+  () => cancelContext.data?.close_comment_min_length ?? 1
+);
+const closeDialog = reactive({ show: false, comment: "", error: "" });
+const closeWithComment = createResource({
+  url: "company_helpdesk.hd_ticket.closing.close_with_comment",
+  onSuccess() {
+    closeDialog.show = false;
+    notifyTicketUpdate("Status", closedStatus.value);
+    ticket.value.reload();
+    activities.value.reload();
+    cancelContext.reload();
+  },
+  onError(error: any) {
+    closeDialog.error = errorText(error, __("Could not close the ticket."));
+  },
+});
+
+function openCloseDialog() {
+  closeDialog.comment = "";
+  closeDialog.error = "";
+  closeDialog.show = true;
+}
+
+function confirmClose() {
+  closeDialog.error = "";
+  closeWithComment.submit({
+    ticket: ticket.value.doc.name,
+    comment: closeDialog.comment.trim(),
+  });
+}
+
 const statusDropdown = computed(() => {
   const statuses =
     ticketStatusStore.statuses.data
@@ -319,6 +390,15 @@ const statusDropdown = computed(() => {
         ticket.value.doc.status !== CANCELLED
       ) {
         openCancelDialog();
+        return;
+      }
+      // HLB-FORK: close-comment — Closed asks for a comment first.
+      if (
+        o.label_agent === closedStatus.value &&
+        ticket.value.doc.status !== closedStatus.value &&
+        cancelContext.data?.close_comment
+      ) {
+        openCloseDialog();
         return;
       }
       notifyTicketUpdate("Status", o.label_agent);
