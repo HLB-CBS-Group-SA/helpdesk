@@ -370,8 +370,10 @@ function getFieldInFormat(fieldTemplate, fieldMeta) {
     placeholder:
       fieldTemplate.placeholder ||
       `Set ${fieldMeta?.label || fieldTemplate.fieldname}...`,
-    readonly: Boolean(fieldMeta.read_only),
-    disabled: Boolean(fieldMeta.read_only),
+    // HLB-FORK: sidebar-fields — a set-only-once field is fixed once the
+    // ticket exists, as frappe enforces on save (the HR fields, app #119).
+    readonly: Boolean(fieldMeta.read_only || fieldMeta.set_only_once),
+    disabled: Boolean(fieldMeta.read_only || fieldMeta.set_only_once),
     url_method: fieldTemplate.url_method || "",
     fieldname: fieldTemplate.fieldname,
     // HLB-FORK: multi-select — TicketField shows every chosen item (app #119).
