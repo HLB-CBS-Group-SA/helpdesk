@@ -3,7 +3,14 @@
        ticket: where it is, who has signed, and the one step open to the person
        looking at it. Every action is a company_helpdesk procurement_api call;
        the server decides who may do what and this only offers what it allows. -->
-  <div v-if="context.data" class="px-4 py-4 flex flex-col gap-4">
+  <ErrorMessage
+    v-if="context.error"
+    class="px-4 py-4"
+    :message="
+      errorText(context.error, __('Could not load the Procurement panel.'))
+    "
+  />
+  <div v-else-if="context.data" class="px-4 py-4 flex flex-col gap-4">
     <div class="flex items-center justify-between">
       <span class="text-ink-gray-8 text-base-semibold">
         {{ __("Procurement") }}
@@ -16,21 +23,21 @@
       />
     </div>
 
-    <!-- the stages -->
-    <ol v-if="ctx.stage !== 'Declined'" class="flex flex-wrap gap-x-4 gap-y-1">
+    <!-- the steps, from the server -->
+    <ol v-if="!ctx.declined" class="flex flex-wrap gap-x-4 gap-y-1">
       <li
-        v-for="(step, i) in STAGES"
+        v-for="(step, i) in ctx.steps"
         :key="step"
         class="flex items-center gap-1.5 text-sm"
         :class="
-          i === stageIndex
+          i === stepIndex
             ? 'text-ink-gray-9 font-medium'
-            : i < stageIndex
+            : i < stepIndex
             ? 'text-ink-gray-6'
             : 'text-ink-gray-4'
         "
       >
-        <LucideCheck v-if="i < stageIndex" class="size-3.5" />
+        <LucideCheck v-if="i < stepIndex" class="size-3.5" />
         <span v-else class="size-3.5 text-center">{{ i + 1 }}</span>
         {{ __(step) }}
       </li>
@@ -42,7 +49,16 @@
       {{ __("Declined.") }}
     </div>
 
-    <p v-if="note" class="text-p-sm text-ink-gray-6">{{ note }}</p>
+    <!-- who has it -->
+    <dl
+      v-if="people.length"
+      class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-p-sm"
+    >
+      <template v-for="p in people" :key="p.label">
+        <dt class="text-ink-gray-5">{{ p.label }}</dt>
+        <dd class="text-ink-gray-8">{{ p.name }}</dd>
+      </template>
+    </dl>
 
     <!-- signatures -->
     <div v-if="ctx.signatures.length" class="flex flex-col gap-2">
@@ -61,7 +77,7 @@
           <div class="text-ink-gray-8">
             {{ __(s.role) }}: {{ s.signer_name }}
             <span v-if="s.decision" class="text-ink-gray-6"
-              >· {{ s.decision }}</span
+              >· {{ __(s.decision) }}</span
             >
           </div>
           <div class="text-ink-gray-5">
@@ -75,52 +91,71 @@
       </div>
     </div>
 
-    <!-- Awaiting Director -->
-    <div v-if="can.accept_upload || can.resend" class="flex flex-wrap gap-2">
-      <Button
-        v-if="can.accept_upload"
-        :label="__('Accept the uploaded approval')"
-        :loading="busy"
-        @click="run('accept_uploaded_approval')"
-      />
-      <Button
-        v-if="can.resend"
-        :label="__('Resend the Director\'s link')"
-        :loading="busy"
-        @click="run('resend_director_link')"
-      />
-    </div>
-
-    <!-- Operations review: send to an authoriser -->
-    <div v-if="can.send" class="flex flex-wrap items-end gap-2">
-      <div class="min-w-48 flex-1">
-        <span class="mb-1.5 block text-sm text-ink-gray-7">{{
-          __("Authoriser")
-        }}</span>
-        <FormControl
-          type="select"
-          :options="[
-            { label: '', value: '' },
-            ...ctx.team.map((m) => ({ label: m.name, value: m.user })),
-          ]"
-          v-model="authoriser"
-        />
-      </div>
+    <!-- Pending verification -->
+    <div v-if="can.start_verification">
       <Button
         variant="solid"
-        :label="__('Validated: send to authoriser')"
-        :disabled="!authoriser"
+        :label="__('Start verification')"
         :loading="busy"
-        @click="run('send_to_authoriser', { authoriser })"
+        @click="run('start_verification')"
       />
     </div>
 
-    <!-- Awaiting authorisation: decide and sign -->
-    <div v-if="can.authorise" class="flex flex-col gap-3">
+    <!-- Verification in progress: send to an approver, or decline -->
+    <div v-if="can.verify" class="flex flex-col gap-3">
+      <div class="flex flex-wrap items-end gap-2">
+        <div class="min-w-48 flex-1">
+          <FormControl
+            type="select"
+            :label="__('PMO Approver')"
+            :options="approverOptions"
+            v-model="approver"
+          />
+        </div>
+        <Button
+          variant="solid"
+          :label="__('Verified: send for review')"
+          :disabled="!approver"
+          :loading="busy"
+          @click="run('verify_approve', { approver })"
+        />
+      </div>
+      <FormControl
+        type="textarea"
+        :rows="2"
+        :label="__('Reason for declining')"
+        v-model="reason"
+      />
+      <div>
+        <Button
+          theme="red"
+          :label="__('Decline')"
+          :disabled="!reason.trim()"
+          :loading="busy"
+          @click="run('verify_decline', { reason: reason.trim() })"
+        />
+      </div>
+    </div>
+
+    <!-- HLB-FORK: procurement-signature — referred to the board: locked, with
+         the same approver, until the board decides (2026-10-22). -->
+    <div
+      v-if="ctx.referred"
+      class="rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-8"
+    >
+      {{
+        __(
+          "Referred to the board. The request is locked until the board has decided."
+        )
+      }}
+    </div>
+
+    <!-- Pending review: decide and sign -->
+    <div v-if="can.decide" class="flex flex-col gap-3">
       <span class="text-sm text-ink-gray-8 font-medium">
         {{
-          can.authorise_role === "Second authoriser"
-            ? __("Second authoriser's decision (clause 8.3)")
+          can.decide_role === "Second authoriser"
+            ? __("Second approver's decision (clause 8.3)")
             : __("Your decision")
         }}
       </span>
@@ -137,29 +172,81 @@
           :label="__('Amount authorised (including VAT)')"
           v-model="amount"
         />
+        <FormControl
+          v-if="needsSecond"
+          type="select"
+          :label="__('Second approver (clause 8.3)')"
+          :options="approverOptions"
+          v-model="secondApprover"
+        />
       </div>
       <FormControl
         type="textarea"
         :rows="3"
         :label="
-          decision === 'DECLINED'
-            ? __('Reason for declining')
-            : __('Conditions attached')
+          needsReason ? __('Reason or conditions (required)') : __('Note')
         "
         v-model="conditions"
       />
-      <SignaturePad v-model="signature" />
+      <template v-if="needsBoard">
+        <FormControl
+          type="textarea"
+          :rows="2"
+          :label="__('Board decision (required)')"
+          v-model="boardDecision"
+        />
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs text-ink-gray-5">
+            {{ __("Board minutes (required)") }}
+          </span>
+          <div v-if="boardMinutes" class="flex items-center gap-2 text-p-sm">
+            <span class="truncate text-ink-gray-8">
+              {{ boardMinutes.file_name }}
+            </span>
+            <Button
+              variant="ghost"
+              icon="lucide-x"
+              :aria-label="__('Remove')"
+              @click="boardMinutes = null"
+            />
+          </div>
+          <div v-else>
+            <input
+              ref="minutesInput"
+              type="file"
+              class="hidden"
+              @change="uploadMinutes"
+            />
+            <Button
+              :label="__('Upload the minutes')"
+              icon-left="lucide-upload"
+              :loading="uploadingMinutes"
+              @click="minutesInput?.click()"
+            />
+          </div>
+        </div>
+      </template>
+      <SignaturePad :key="padKey" v-model="signature" />
       <div class="flex justify-end">
         <Button
           variant="solid"
           :label="__('Sign and record the decision')"
-          :disabled="!decision || !signature"
+          :disabled="
+            !decision ||
+            !signature ||
+            (needsSecond && !secondApprover) ||
+            (needsReason && !conditions.trim()) ||
+            (needsBoard && (!boardDecision.trim() || !boardMinutes))
+          "
           :loading="busy"
           @click="
-            run('authorise', {
+            run('decide', {
               decision,
               amount_authorised: needsAmount ? amount : null,
               conditions,
+              second_approver: needsSecond ? secondApprover : null,
+              board_decision: needsBoard ? boardDecision.trim() : null,
+              board_minutes: needsBoard ? boardMinutes?.file_url : null,
               image: signature?.image,
               method: signature?.method,
               typed_name: signature?.typed_name,
@@ -169,66 +256,119 @@
       </div>
     </div>
 
-    <!-- Load payment: the final approver records the receipt review (C-01).
-         Downloading writes nothing (a GET is rolled back); this POST does. -->
-    <div
-      v-if="can.record_review"
-      class="flex flex-col gap-2 rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
-    >
-      <p class="text-p-sm text-ink-gray-8">
-        {{
-          __(
-            "Download the receipt and check it. Then confirm, so the request can be concluded and sent to Creditors."
-          )
-        }}
-      </p>
+    <!-- Pending review: refer to the board, after "Are you sure?" -->
+    <div v-if="can.refer_to_board">
+      <Button
+        :label="__('Refer to the board')"
+        :loading="busy"
+        @click="showReferDialog = true"
+      />
+      <Dialog
+        v-model="showReferDialog"
+        :options="{ title: __('Refer to the board?') }"
+      >
+        <template #body-content>
+          <p class="text-p-sm text-ink-gray-6">
+            {{
+              __(
+                "Are you sure? The request stays with you and is locked. When the board has decided, approving it needs the board's decision and the minutes."
+              )
+            }}
+          </p>
+        </template>
+        <template #actions>
+          <div class="flex justify-end gap-2">
+            <Button :label="__('No')" @click="showReferDialog = false" />
+            <Button
+              variant="solid"
+              :label="__('Yes, refer it')"
+              :loading="busy"
+              @click="referToBoard"
+            />
+          </div>
+        </template>
+      </Dialog>
+    </div>
+
+    <!-- Pending review: send back for more information -->
+    <div v-if="can.request_more_info" class="flex flex-col gap-2">
+      <FormControl
+        type="textarea"
+        :rows="2"
+        :label="__('What is missing')"
+        v-model="moreInfo"
+      />
       <div>
         <Button
-          variant="solid"
-          :label="__('I have reviewed the receipt')"
-          icon-left="lucide-check"
+          :label="__('Send back for more information')"
+          :disabled="moreInfo.trim().length < minLength"
           :loading="busy"
-          @click="run('record_receipt_review')"
+          @click="run('request_more_info', { comment: moreInfo.trim() })"
         />
       </div>
     </div>
 
-    <!-- Load payment: conclude -->
-    <div v-if="can.conclude" class="flex flex-col gap-2">
-      <div class="flex flex-wrap items-end gap-2">
-        <div class="min-w-48 flex-1">
-          <FormControl
-            type="text"
-            :label="__('Payment reference')"
-            v-model="paymentReference"
-          />
-        </div>
+    <!-- Approved, Processing -->
+    <div v-if="can.start_processing">
+      <Button
+        variant="solid"
+        :label="__('Processing')"
+        :loading="busy"
+        @click="run('start_processing')"
+      />
+    </div>
+    <div v-if="can.mark_loaded">
+      <Button
+        variant="solid"
+        :label="__('Loaded for payment')"
+        :loading="busy"
+        @click="run('mark_loaded')"
+      />
+    </div>
+
+    <!-- Loaded for payment: Paid, with a closing comment -->
+    <div v-if="can.mark_paid" class="flex flex-col gap-2">
+      <FormControl
+        type="text"
+        :label="__('Payment reference (optional)')"
+        v-model="paymentReference"
+      />
+      <FormControl
+        type="textarea"
+        :rows="2"
+        :label="__('Closing comment')"
+        v-model="closingComment"
+      />
+      <div>
         <Button
           variant="solid"
-          :label="__('Conclude')"
-          :disabled="!ctx.receipt_ready || !paymentReference.trim()"
+          :label="__('Mark paid')"
+          :disabled="closingComment.trim().length < minLength"
           :loading="busy"
           @click="
-            run('conclude', { payment_reference: paymentReference.trim() })
+            run('mark_paid', {
+              comment: closingComment.trim(),
+              payment_reference: paymentReference.trim(),
+            })
           "
         />
       </div>
-      <p v-if="!ctx.receipt_ready" class="text-p-sm text-ink-gray-6">
-        {{
-          __(
-            "{0} must review the receipt before the request is concluded. It is then emailed to Creditors.",
-            ctx.final_approver_name || __("The final approver")
-          )
-        }}
-      </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { errorText } from "@/utils";
-import { Button, createResource, dayjs, FormControl, toast } from "frappe-ui";
+import { errorText, uploadFunction } from "@/utils";
+import {
+  Button,
+  createResource,
+  dayjs,
+  Dialog,
+  ErrorMessage,
+  FormControl,
+  toast,
+} from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import LucideCheck from "~icons/lucide/check";
 import SignaturePad, { type Signature } from "../ticket/SignaturePad.vue";
@@ -237,13 +377,6 @@ const props = defineProps<{ ticketId: string }>();
 const emit = defineEmits<{ (e: "changed"): void }>();
 
 const API = "company_helpdesk.procurement_api";
-const STAGES = [
-  "Awaiting Director",
-  "Operations review",
-  "Awaiting authorisation",
-  "Load payment",
-  "Concluded",
-];
 
 const context = createResource({
   url: `${API}.get_context`,
@@ -252,72 +385,133 @@ const context = createResource({
 });
 watch(
   () => props.ticketId,
-  () => context.reload()
+  () => {
+    resetForm();
+    context.reload();
+  }
 );
 
 const ctx = computed(() => context.data || {});
 const can = computed(() => ctx.value.can || {});
-const stageIndex = computed(() => STAGES.indexOf(ctx.value.stage));
+const stepIndex = computed(() =>
+  (ctx.value.steps || []).indexOf(ctx.value.status)
+);
+const minLength = computed(() => ctx.value.close_comment_min_length || 1);
 
-const note = computed(() => {
-  const c = ctx.value;
-  switch (c.stage) {
-    case "Awaiting Director":
-      return c.has_uploaded_approval
-        ? __(
-            "The requester uploaded a signed approval. Check it, then accept it."
-          )
-        : __(
-            "Waiting for {0} to sign the request.",
-            c.director || __("the Director")
-          );
-    case "Awaiting authorisation":
-      return c.two_approvers && c.decision
-        ? __("Clause 8.3: waiting for a second authoriser.")
-        : __("Waiting for the authoriser's decision.");
-    case "Load payment":
-      return __("Approved. Load the payment, then conclude the request.");
-    case "Concluded":
-      return __(
-        "Concluded. Payment reference: {0}",
-        c.payment_reference || "-"
-      );
-    default:
-      return "";
-  }
-});
+const people = computed(() =>
+  [
+    { label: __("Verified by"), person: ctx.value.verifier },
+    { label: __("First approver"), person: ctx.value.first_approver },
+    { label: __("Second approver"), person: ctx.value.second_approver },
+  ]
+    .filter((p) => p.person)
+    .map((p) => ({ label: p.label, name: p.person.name }))
+);
+
+const approverOptions = computed(() => [
+  { label: "", value: "" },
+  ...(ctx.value.approvers || []).map((a: { user: string; name: string }) => ({
+    label: a.name,
+    value: a.user,
+  })),
+]);
 
 // ---- the decision
 const decision = ref("");
 const amount = ref<number | null>(null);
 const conditions = ref("");
 const signature = ref<Signature | null>(null);
-const authoriser = ref("");
+const secondApprover = ref("");
+const approver = ref("");
+const reason = ref("");
+const moreInfo = ref("");
+const closingComment = ref("");
 const paymentReference = ref("");
+const boardDecision = ref("");
+const boardMinutes = ref<{ file_url: string; file_name: string } | null>(null);
+const uploadingMinutes = ref(false);
+const minutesInput = ref<HTMLInputElement | null>(null);
+const showReferDialog = ref(false);
+// A fresh pad after each step: the pad keeps its own canvas and typed name.
+const padKey = ref(0);
 
-const decisionOptions = computed(() => {
-  const values = ["APPROVED", "APPROVED WITH CONDITIONS", "DECLINED"];
-  if (can.value.authorise_role === "Authoriser")
-    values.push("REFERRED TO BOARD");
-  return [
-    { label: "", value: "" },
-    ...values.map((v) => ({ label: __(v), value: v })),
-  ];
-});
-const needsAmount = computed(
-  () =>
-    can.value.authorise_role === "Authoriser" &&
-    ["APPROVED", "APPROVED WITH CONDITIONS"].includes(decision.value)
+function resetForm() {
+  decision.value = "";
+  amount.value = null;
+  conditions.value = "";
+  signature.value = null;
+  secondApprover.value = "";
+  approver.value = "";
+  reason.value = "";
+  moreInfo.value = "";
+  closingComment.value = "";
+  paymentReference.value = "";
+  boardDecision.value = "";
+  boardMinutes.value = null;
+  showReferDialog.value = false;
+  padKey.value += 1;
+}
+
+// Each decision comes from the server with what it needs (amount, reason,
+// second approver), so no rule is repeated here.
+type DecisionOption = {
+  value: string;
+  needs_amount: boolean;
+  needs_reason: boolean;
+  needs_second: boolean;
+  needs_board: boolean;
+};
+const decisionOptions = computed(() => [
+  { label: "", value: "" },
+  ...(can.value.decisions || []).map((d: DecisionOption) => ({
+    label: __(d.value),
+    value: d.value,
+  })),
+]);
+const chosen = computed<DecisionOption | undefined>(() =>
+  (can.value.decisions || []).find(
+    (d: DecisionOption) => d.value === decision.value
+  )
 );
+const needsAmount = computed(() => Boolean(chosen.value?.needs_amount));
+const needsReason = computed(() => Boolean(chosen.value?.needs_reason));
+const needsSecond = computed(() => Boolean(chosen.value?.needs_second));
+const needsBoard = computed(() => Boolean(chosen.value?.needs_board));
+
+// The minutes are uploaded unattached; the server attaches them on the decision.
+async function uploadMinutes(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  uploadingMinutes.value = true;
+  try {
+    boardMinutes.value = (await uploadFunction(file)) as {
+      file_url: string;
+      file_name: string;
+    };
+  } catch (err: any) {
+    toast.error(errorText(err, __("Upload failed")));
+  } finally {
+    uploadingMinutes.value = false;
+  }
+}
+
+function referToBoard() {
+  run("refer_to_board");
+}
 
 // ---- the steps: one resource per API method
 const METHODS = [
-  "accept_uploaded_approval",
-  "resend_director_link",
-  "send_to_authoriser",
-  "authorise",
-  "record_receipt_review",
-  "conclude",
+  "start_verification",
+  "verify_approve",
+  "verify_decline",
+  "decide",
+  "request_more_info",
+  "refer_to_board",
+  "start_processing",
+  "mark_loaded",
+  "mark_paid",
 ];
 const steps = Object.fromEntries(
   METHODS.map((method) => [
@@ -326,9 +520,7 @@ const steps = Object.fromEntries(
       url: `${API}.${method}`,
       onSuccess(data: any) {
         context.data = data;
-        decision.value = "";
-        conditions.value = "";
-        signature.value = null;
+        resetForm();
         emit("changed");
       },
       onError(error: any) {
