@@ -166,6 +166,8 @@ import {
   parseField,
 } from "@/composables/formCustomisation";
 import { useNotifyTicketUpdate } from "@/composables/realtime";
+// HLB-FORK: type-change-warning
+import { confirmTypeChange } from "@/composables/useTypeChangeWarning";
 import { useShortcut } from "@/composables/shortcuts";
 import { getMeta } from "@/stores/meta";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
@@ -387,12 +389,32 @@ function getFieldInFormat(fieldTemplate, fieldMeta) {
 const normalize = (v: string | FieldValue) =>
   v === null || v === undefined ? "" : v;
 
+// HLB-FORK: type-change-warning — set by the warning's "Change type" button.
+let typeChangeConfirmed = false;
+
 function handleFieldUpdate(
   fieldname: string,
   value: FieldValue,
   isCoreFieldUpdated = false
 ) {
   if (normalize(ticket.value.doc[fieldname]) == normalize(value)) return;
+  // HLB-FORK: type-change-warning — an agent is asked before the type changes
+  // (owner, 2026-10-19). The team stays; the old type's answers stay hidden.
+  if (fieldname === "ticket_type" && !typeChangeConfirmed) {
+    const from = ticket.value.doc.ticket_type;
+    confirmTypeChange(
+      __(
+        "The ticket keeps its team. Answers that belong to {0} are kept, but no longer shown.",
+        [__(from)]
+      ),
+      () => {
+        typeChangeConfirmed = true;
+        handleFieldUpdate(fieldname, value, isCoreFieldUpdated);
+      }
+    );
+    return;
+  }
+  typeChangeConfirmed = false;
   if (isCoreFieldUpdated) {
     const label = getField(fieldname)?.label || fieldname;
     notifyTicketUpdate(label, value as string);

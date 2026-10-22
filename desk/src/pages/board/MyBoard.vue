@@ -191,6 +191,7 @@ type BoardTicket = {
   status: string;
   priority: string;
   raised_by: string;
+  ticket_type: string;
 };
 
 const router = useRouter();
@@ -202,13 +203,39 @@ const ticketStatusStore = useTicketStatusStore();
 const dragged = ref<string | null>(null);
 const dragOver = ref<string | null>(null);
 
+// HLB-FORK: status-sets — each ticket type may have its own statuses (2026-10-21).
+// The general set and every type's set come from the server, so the board
+// shows the general columns plus those of the types on it, and a card offers
+// only its own type's statuses.
+const statusSets = createResource({
+  url: "company_helpdesk.api.status_sets",
+  auto: true,
+});
+// A type moved only by its own panel (Procurement Request) offers no moves here.
+function allowedFor(ticketType: string): string[] {
+  if (statusSets.data?.panel_only?.includes(ticketType)) return [];
+  return statusSets.data?.types?.[ticketType] || statusSets.data?.general || [];
+}
+const boardStatuses = computed<Set<string>>(() => {
+  const names = new Set<string>(statusSets.data?.general || []);
+  for (const t of tickets.data || []) {
+    for (const name of statusSets.data?.types?.[t.ticket_type] || []) {
+      names.add(name);
+    }
+  }
+  return names;
+});
+
 // Open statuses only. Moving a ticket to Cancelled needs a reason and Closed
 // is the resolution path, so both stay on the ticket page, where they are
 // handled properly.
 const openStatuses = computed<HDTicketStatus[]>(
   () =>
     ticketStatusStore.statuses.data?.filter(
-      (s: HDTicketStatus) => s.enabled && s.category !== "Resolved"
+      (s: HDTicketStatus) =>
+        s.enabled &&
+        s.category !== "Resolved" &&
+        boardStatuses.value.has(s.label_agent)
     ) || []
 );
 
@@ -233,7 +260,7 @@ const boardFilters = computed(() => ({
 }));
 const tickets = createListResource({
   doctype: "HD Ticket",
-  fields: ["name", "subject", "status", "priority", "raised_by"],
+  fields: ["name", "subject", "status", "priority", "raised_by", "ticket_type"],
   filters: boardFilters,
   orderBy: "modified desc",
   pageLength: PAGE_LENGTH,
@@ -362,13 +389,29 @@ function move(name: string, status: string) {
 
 function onDrop(status: string) {
   dragOver.value = null;
-  if (dragged.value) move(dragged.value, status);
+  const ticket = tickets.data?.find(
+    (t: BoardTicket) => t.name === dragged.value
+  );
+  if (ticket && allowedFor(ticket.ticket_type).includes(status)) {
+    move(ticket.name, status);
+  } else if (ticket && ticket.status !== status) {
+    toast.error(
+      statusSets.data?.panel_only?.includes(ticket.ticket_type)
+        ? __("Move a {0} from the panel on the ticket.", [
+            __(ticket.ticket_type),
+          ])
+        : __("This ticket cannot have the status {0}.", [__(status)])
+    );
+  }
   dragged.value = null;
 }
 
 function moveOptions(t: BoardTicket) {
+  const allowed = allowedFor(t.ticket_type);
   return orderedStatuses.value
-    .filter((s) => s.label_agent !== t.status)
+    .filter(
+      (s) => s.label_agent !== t.status && allowed.includes(s.label_agent)
+    )
     .map((s) => ({
       label: __("Move to {0}", s.label_agent),
       onClick: () => move(t.name, s.label_agent),
