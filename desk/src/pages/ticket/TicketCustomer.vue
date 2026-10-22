@@ -9,8 +9,10 @@
           v-if="ticket.data._customActions"
           :actions="ticket.data._customActions"
         />
+        <!-- HLB-FORK: portal-close-comment — not on a finished ticket, nor on
+             a Procurement Request; the server says (api.portal_context). -->
         <Button
-          v-if="ticket.data.status !== 'Closed'"
+          v-if="portalContext.data?.close"
           :label="__('Close')"
           theme="gray"
           variant="solid"
@@ -89,7 +91,12 @@
       <!-- Ticket Sidebar only for desktop view-->
       <TicketCustomerSidebar v-if="!isMobileView" @open="isExpanded = true" />
     </div>
-    <TicketFeedback v-model:open="showFeedbackDialog" />
+    <!-- HLB-FORK: portal-close-comment — one dialog for every close: the
+         comment always, the rating when helpdesk demands it. -->
+    <TicketFeedback
+      v-model:open="showFeedbackDialog"
+      :ask-rating="showFeedback"
+    />
   </div>
 </template>
 
@@ -150,6 +157,8 @@ const ticket = createResource({
   auto: true,
   onSuccess: (data) => {
     data.status = getStatus(data.status)?.label_customer;
+    // HLB-FORK: procurement-processed — what the page may offer follows the ticket.
+    portalContext.reload();
     setupCustomizations(ticket, {
       doc: data,
       call,
@@ -300,55 +309,10 @@ function updateTicket(fieldname: string, value: string) {
   });
 }
 
+// HLB-FORK: portal-close-comment — every close asks why (TicketFeedback.vue).
 function handleClose() {
-  if (showFeedback.value) {
-    showFeedbackDialog.value = true;
-  } else {
-    showConfirmationDialog();
-  }
+  showFeedbackDialog.value = true;
 }
-
-function showConfirmationDialog() {
-  $dialog({
-    title: __("Close Ticket"),
-    message: __("Are you sure you want to close this ticket?"),
-    actions: [
-      {
-        label: __("Confirm"),
-        variant: "solid",
-        onClick(close: Function) {
-          ticket.data.status = "Closed";
-          setValue.submit(
-            { fieldname: "status", value: "Closed" },
-            {
-              onSuccess: () => {
-                toast.success(__("Ticket closed successfully."));
-              },
-            }
-          );
-          close();
-        },
-      },
-    ],
-  });
-}
-
-const setValue = createResource({
-  url: "frappe.client.set_value",
-  debounce: 300,
-  makeParams: (params) => {
-    return {
-      doctype: "HD Ticket",
-      name: props.ticketId,
-      fieldname: params.fieldname,
-      value: params.value,
-    };
-  },
-  onSuccess: () => {
-    showFeedbackDialog.value = false;
-    ticket.reload();
-  },
-});
 
 const breadcrumbs = computed(() => {
   let items = [{ label: __("Tickets"), route: { name: "TicketsCustomer" } }];
@@ -359,7 +323,15 @@ const breadcrumbs = computed(() => {
   return items;
 });
 
-const showEditor = computed(() => ticket.data.status !== "Closed");
+// HLB-FORK: procurement-processed — no reply box on a processed Procurement
+// Request; the server says which (company_helpdesk.api.portal_context).
+const portalContext = createResource({
+  url: "company_helpdesk.api.portal_context",
+  makeParams: () => ({ ticket: props.ticketId }),
+});
+const showEditor = computed(
+  () => ticket.data.status !== "Closed" && portalContext.data?.reply !== false
+);
 
 // this handles whether the ticket was raised and then was closed without any reply from the agent.
 const { isFeedbackMandatory } = useConfigStore();

@@ -223,6 +223,8 @@ import {
   parseField,
   setupCustomizations,
 } from "@/composables/formCustomisation";
+// HLB-FORK: type-change-warning
+import { answersOf, confirmTypeChange } from "@/composables/useTypeChangeWarning";
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
 import { capture } from "@/telemetry";
@@ -399,6 +401,34 @@ watch(asksAdditional, (asks) => {
   additional.value = "";
   if (description.value === NO_ADDITIONAL) description.value = "";
 });
+
+// HLB-FORK: type-change-warning — changing the type after answering the old
+// type's questions asks first (owner, 2026-10-19). "Change type" removes those
+// answers, so they are not sent with the new type; the server clears them too
+// (hd_ticket/types.py clear_other_types). Dismissing keeps the old type.
+let revertingType = false;
+watch(
+  () => (templateFields as Record<string, string>)["ticket_type"],
+  (now, before) => {
+    if (revertingType) {
+      revertingType = false;
+      return;
+    }
+    if (!before || !now || now === before) return;
+    const fields = templateFields as Record<string, any>;
+    const answered = answersOf(before, fields);
+    if (!answered.length) return;
+    revertingType = true;
+    fields["ticket_type"] = before;
+    confirmTypeChange(
+      __("The answers you gave for {0} will be removed.", [__(before)]),
+      () => {
+        answered.forEach((f) => (fields[f] = null));
+        fields["ticket_type"] = now;
+      }
+    );
+  }
+);
 
 const bodyRequired = computed(
   () => !OPTIONAL_BODY.has(currentSubtype.value) && !isProcurement.value

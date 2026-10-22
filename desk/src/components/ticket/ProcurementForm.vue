@@ -67,14 +67,24 @@
               @update:model-value="(v) => set(name, v)"
               @change="(v) => set(name, v?.target?.value ?? v?.value ?? v)"
             />
-            <!-- Only the Entra Directors group (HLB Director) may be the
-                 Requesting Director; the server refuses anyone else (SI-03). -->
+            <!-- HLB-FORK: procurement-form — the members of the Entra group
+                 Helpdesk - Directors, or the list the daily sync stored; the
+                 server refuses anyone else. No list: the reason, no typing
+                 (2026-10-22). -->
             <FormControl
-              v-else-if="name === 'pr_director'"
+              v-else-if="name === 'pr_director' && directorOptions.length > 1"
               type="select"
               :options="directorOptions"
               :model-value="doc[name]"
               @update:model-value="(v) => set(name, v)"
+            />
+            <ErrorMessage
+              v-else-if="name === 'pr_director' && !directors.loading"
+              :message="
+                __(
+                  'The list of Directors cannot be read from Microsoft 365 now. Try again later, or ask IT to check the Microsoft 365 connection.'
+                )
+              "
             />
             <Link
               v-else-if="meta[name]?.fieldtype === 'Link'"
@@ -163,7 +173,7 @@
       >
         {{ payRunNote }}
       </p>
-      <p v-if="section.declarant" class="mt-3 text-p-sm text-ink-gray-6">
+      <p v-if="section.declarant" class="mt-3 text-lg text-ink-gray-8">
         {{ __("Requester: {0}, {1}", userName, todayShown) }}
       </p>
     </section>
@@ -194,6 +204,7 @@ import {
   Button,
   createResource,
   DatePicker,
+  ErrorMessage,
   FormControl,
   toast,
 } from "frappe-ui";
@@ -221,6 +232,7 @@ const sections = [
     title: __("A. Requester and entity"),
     fields: [
       "pr_request_date",
+      "pr_position",
       "pr_entity",
       "pr_cost_category",
       "pr_other_specify",
@@ -290,11 +302,12 @@ const sections = [
   {
     title: __("G. Declaration"),
     declarant: true,
+    // The tick box last, under what it confirms (owner, 2026-10-21).
     fields: [
-      "pr_declaration",
       "pr_director",
       "pr_director_designation",
       "pr_director_approval",
+      "pr_declaration",
     ],
   },
 ];
@@ -671,7 +684,7 @@ const lateBy = computed<number>(() => {
   return days < needed ? needed : 0;
 });
 
-// ---- the Requesting Director: the Entra Directors group, from the server (SI-03).
+// ---- the Requesting Director: the Entra group Helpdesk - Directors, from the server.
 const directors = createResource({
   url: "company_helpdesk.procurement_api.directors",
   method: "GET",
