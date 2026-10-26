@@ -43,7 +43,7 @@
           </div>
         </div>
         <!-- Status -->
-        <Dropdown :options="statusDropdown" placement="right">
+        <Dropdown :options="statusChange.statusOptions" placement="right">
           <template #default="{ open }">
             <Button :label="__(ticket.doc.status)" ref="statusRef">
               <template #prefix>
@@ -81,94 +81,9 @@
     :ticket="String(ticket.doc.name)"
   />
 
-  <!-- HLB-FORK: cancel-reason — cancelling asks why, in the same step.
-       company_helpdesk refuses to cancel a ticket without a reason
-       (ticket.validate_cancellation), and the ticket's own "Reason for
-       cancellation" field only renders once the status already IS Cancelled.
-       With the status menu sending the status alone, the server refused the
-       save and the field never appeared: cancelling looked impossible.
-       So the reason is collected here and sent WITH the status.
-       Only offered to people who may cancel (Super Admins, or the approving
-       team on a request waiting on it, where it reads as Decline).
-       See customisations.manifest.json id=ui-cancel-reason. -->
-  <Dialog
-    v-model="cancelDialog.show"
-    :options="{
-      title: cancelDialog.declining
-        ? __('Decline request')
-        : __('Cancel ticket'),
-    }"
-  >
-    <template #body-content>
-      <p class="text-p-sm text-ink-gray-6 mb-3">
-        {{
-          cancelDialog.declining
-            ? __(
-                "The request is declined and cancelled, and the person who raised it is told why."
-              )
-            : __(
-                "The ticket is cancelled, and the person who raised it is told why."
-              )
-        }}
-      </p>
-      <FormControl
-        v-model="cancelDialog.reason"
-        type="textarea"
-        :label="__('Reason')"
-        :disabled="ticket.setValue.loading"
-      />
-      <p v-if="cancelDialog.error" class="text-p-sm text-ink-red-7 mt-2">
-        {{ cancelDialog.error }}
-      </p>
-    </template>
-    <template #actions>
-      <Button
-        class="w-full"
-        variant="solid"
-        theme="red"
-        :loading="ticket.setValue.loading"
-        :disabled="!cancelDialog.reason.trim()"
-        :label="cancelDialog.declining ? __('Decline') : __('Cancel ticket')"
-        @click="confirmCancel"
-      />
-    </template>
-  </Dialog>
-
-  <!-- HLB-FORK: close-comment — closing asks what was done; the server refuses
-       a close without it (app hd_ticket/closing.py, manifest ui-close-comment). -->
-  <Dialog
-    v-model="closeDialog.show"
-    :options="{ title: __('Close ticket #{0}', [ticket?.doc?.name]) }"
-  >
-    <template #body-content>
-      <p class="text-p-sm text-ink-gray-6 mb-3">
-        {{
-          __(
-            "Say what was done. The comment is kept on the ticket as an internal comment."
-          )
-        }}
-      </p>
-      <FormControl
-        v-model="closeDialog.comment"
-        type="textarea"
-        :label="__('Closing comment')"
-        :disabled="closeWithComment.loading"
-      />
-      <p v-if="closeDialog.error" class="text-p-sm text-ink-red-7 mt-2">
-        {{ closeDialog.error }}
-      </p>
-    </template>
-    <template #actions>
-      <Button
-        class="w-full"
-        variant="solid"
-        :loading="closeWithComment.loading"
-        :disabled="closeDialog.comment.trim().length < closeMinLength"
-        :label="__('Close ticket')"
-        @click="confirmClose"
-      />
-    </template>
-  </Dialog>
+  <!-- HLB-FORK: cancel-reason / HLB-FORK: close-comment — the reason and closing-comment
+       dialogs, shared with the mobile page. See TicketStatusDialogs.vue. -->
+  <TicketStatusDialogs :change="statusChange" :ticket="ticket" />
 
   <!-- HLB-FORK: delete-reason — the single-ticket Delete asks why, like the
        list's bulk Delete does, and goes through the same endpoint. Upstream's
@@ -220,9 +135,10 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import TicketMergeModal from "@/components/ticket/TicketMergeModal.vue";
 // HLB-FORK: ticket-repeat
 import TicketRepeatDialog from "@/components/ticket-agent/TicketRepeatDialog.vue";
+import TicketStatusDialogs from "@/components/ticket-agent/TicketStatusDialogs.vue";
+import { useTicketStatusChange } from "@/composables/useTicketStatusChange";
 import { showMergeModal } from "@/pages/ticket/modalStates";
 import { setupCustomizations } from "@/composables/formCustomisation";
-import { useNotifyTicketUpdate } from "@/composables/realtime";
 import { useShortcut } from "@/composables/shortcuts";
 import { useView } from "@/composables/useView";
 import { globalStore } from "@/stores/globalStore";
@@ -234,7 +150,6 @@ import {
   TicketSymbol,
   View,
 } from "@/types";
-import { HDTicketStatus } from "@/types/doctypes";
 import { getIcon } from "@/utils";
 // HLB-FORK: error-text
 import { errorText } from "@/utils";
@@ -286,141 +201,14 @@ const customizations = inject(CustomizationSymbol)!;
 const activities = inject(ActivitiesSymbol)!;
 const showSubjectDialog = ref(false);
 
-const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
 
-// HLB-FORK: cancel-reason — may this person cancel, and is it a decline?
-// Asked of the server rather than worked out here, so the menu and the rule
-// that enforces it cannot disagree.
-const CANCELLED = "Cancelled";
-const cancelContext = createResource({
-  url: "company_helpdesk.api.cancel_context",
-  makeParams: () => ({ ticket: ticket.value?.name }),
-  auto: true,
-});
-const cancelDialog = reactive({
-  show: false,
-  reason: "",
-  error: "",
-  declining: false,
-});
-
-function openCancelDialog() {
-  cancelDialog.reason = "";
-  cancelDialog.error = "";
-  cancelDialog.declining = Boolean(cancelContext.data?.declining);
-  cancelDialog.show = true;
-}
-
-function confirmCancel() {
-  const reason = cancelDialog.reason.trim();
-  if (!reason) return;
-  cancelDialog.error = "";
-  notifyTicketUpdate("Status", CANCELLED);
-  ticket.value.setValue.submit(
-    { status: CANCELLED, cancel_reason: reason },
-    {
-      onSuccess() {
-        cancelDialog.show = false;
-        activities.value.reload();
-        cancelContext.reload();
-      },
-      onError(error: any) {
-        cancelDialog.error = errorText(error, __("Could not cancel."));
-      },
-    }
-  );
-}
-
-// HLB-FORK: close-comment — whether to ask, the status name and the minimum
-// length all come from cancelContext, so the rule lives on the server only.
-const closedStatus = computed(() => cancelContext.data?.closed_status);
-const closeMinLength = computed(
-  () => cancelContext.data?.close_comment_min_length ?? 1
+// HLB-FORK: cancel-reason / HLB-FORK: close-comment — the status menu and its two
+// dialogs, shared with the mobile page (composables/useTicketStatusChange.ts).
+const statusChange = useTicketStatusChange(ticket, () =>
+  activities.value.reload()
 );
-const closeDialog = reactive({ show: false, comment: "", error: "" });
-const closeWithComment = createResource({
-  url: "company_helpdesk.hd_ticket.closing.close_with_comment",
-  onSuccess() {
-    closeDialog.show = false;
-    notifyTicketUpdate("Status", closedStatus.value);
-    ticket.value.reload();
-    activities.value.reload();
-    cancelContext.reload();
-  },
-  onError(error: any) {
-    closeDialog.error = errorText(error, __("Could not close the ticket."));
-  },
-});
+const cancelContext = statusChange.cancelContext;
 
-function openCloseDialog() {
-  closeDialog.comment = "";
-  closeDialog.error = "";
-  closeDialog.show = true;
-}
-
-function confirmClose() {
-  closeDialog.error = "";
-  closeWithComment.submit({
-    ticket: ticket.value.doc.name,
-    comment: closeDialog.comment.trim(),
-  });
-}
-
-const statusDropdown = computed(() => {
-  const statuses =
-    ticketStatusStore.statuses.data
-      ?.filter((s) => s.enabled)
-      // HLB-FORK: cancel-reason — not offered to people who would be refused.
-      .filter(
-        (s) =>
-          s.label_agent !== CANCELLED ||
-          ticket.value.doc.status === CANCELLED ||
-          cancelContext.data?.allowed
-      ) || [];
-  return statuses.map((o: HDTicketStatus) => ({
-    label:
-      o.label_agent === CANCELLED && cancelContext.data?.declining
-        ? __("Decline (Cancelled)")
-        : __(o.label_agent),
-    value: o.label_agent,
-    onClick: () => {
-      // HLB-FORK: cancel-reason — Cancelled goes through the reason dialog.
-      if (
-        o.label_agent === CANCELLED &&
-        ticket.value.doc.status !== CANCELLED
-      ) {
-        openCancelDialog();
-        return;
-      }
-      // HLB-FORK: close-comment — Closed asks for a comment first.
-      if (
-        o.label_agent === closedStatus.value &&
-        ticket.value.doc.status !== closedStatus.value &&
-        cancelContext.data?.close_comment
-      ) {
-        openCloseDialog();
-        return;
-      }
-      notifyTicketUpdate("Status", o.label_agent);
-      if (ticket.value.doc.status === o.label_agent) return;
-      ticket.value.setValue.submit(
-        { status: o.label_agent },
-        {
-          onSuccess() {
-            activities.value.reload();
-            // HLB-FORK: cancel-reason — leaving Pending approval changes
-            // whether this person may still cancel, and how it is worded.
-            cancelContext.reload();
-          },
-        }
-      );
-    },
-    icon: () =>
-      h(IndicatorIcon, {
-        class: o.parsed_color,
-      }),
-  }));
-});
 const breadcrumbs = computed(() => {
   let items = [{ label: __("Tickets"), route: { name: "TicketsAgent" } }];
   if (route.query.view) {

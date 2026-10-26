@@ -67,14 +67,24 @@
               @update:model-value="(v) => set(name, v)"
               @change="(v) => set(name, v?.target?.value ?? v?.value ?? v)"
             />
-            <!-- Only the Entra Directors group (HLB Director) may be the
-                 Requesting Director; the server refuses anyone else (SI-03). -->
+            <!-- HLB-FORK: procurement-form — the members of the Entra group
+                 Helpdesk - Directors, or the list the daily sync stored; the
+                 server refuses anyone else. No list: the reason, no typing
+                 (2026-10-22). -->
             <FormControl
-              v-else-if="name === 'pr_director'"
+              v-else-if="name === 'pr_director' && directorOptions.length > 1"
               type="select"
               :options="directorOptions"
               :model-value="doc[name]"
               @update:model-value="(v) => set(name, v)"
+            />
+            <ErrorMessage
+              v-else-if="name === 'pr_director' && !directors.loading"
+              :message="
+                __(
+                  'The list of Directors cannot be read from Microsoft 365 now. Try again later, or ask IT to check the Microsoft 365 connection.'
+                )
+              "
             />
             <Link
               v-else-if="meta[name]?.fieldtype === 'Link'"
@@ -163,7 +173,7 @@
       >
         {{ payRunNote }}
       </p>
-      <p v-if="section.declarant" class="mt-3 text-p-sm text-ink-gray-6">
+      <p v-if="section.declarant" class="mt-3 text-lg text-ink-gray-8">
         {{ __("Requester: {0}, {1}", userName, todayShown) }}
       </p>
     </section>
@@ -194,6 +204,7 @@ import {
   Button,
   createResource,
   DatePicker,
+  ErrorMessage,
   FormControl,
   toast,
 } from "frappe-ui";
@@ -221,6 +232,7 @@ const sections = [
     title: __("A. Requester and entity"),
     fields: [
       "pr_request_date",
+      "pr_position",
       "pr_entity",
       "pr_cost_category",
       "pr_other_specify",
@@ -290,11 +302,12 @@ const sections = [
   {
     title: __("G. Declaration"),
     declarant: true,
+    // The tick box last, under what it confirms (owner, 2026-10-21).
     fields: [
-      "pr_declaration",
       "pr_director",
       "pr_director_designation",
       "pr_director_approval",
+      "pr_declaration",
     ],
   },
 ];
@@ -445,64 +458,29 @@ function formatPhone(typed: string): string {
   return `+27 (0) ${parts.filter(Boolean).join(" ")}`;
 }
 
-// ---- the worked-out figures (the server's formulas, for display only)
-const VAT_RATES: Record<string, number> = { "15%": 0.15, "0%": 0 };
-const MONTHS: Record<string, number> = {
-  Monthly: 1,
-  Quarterly: 3,
-  "Bi-annual": 6,
-  Annual: 12,
-};
+// ---- Section C's figures, the policy flags, the pay run and the subject:
+// worked out by the server with the rules the save uses
+// (company_helpdesk procurement_api.preview, owner 2026-10-22), so the form
+// repeats no rule and its figures can never disagree with the ticket's.
+const preview = createResource({
+  url: "company_helpdesk.procurement_api.preview",
+  method: "GET",
+});
+let previewTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => JSON.stringify(props.doc),
+  (values) => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => preview.fetch({ values }), 400);
+  },
+  { immediate: true }
+);
+const worked = computed<Record<string, any> | null>(() => preview.data || null);
 
 function parseDate(value: string): Date | null {
   if (!value) return null;
   const d = new Date(`${value}T00:00:00`);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-function termMonths(): number {
-  const start = parseDate(props.doc.pr_term_from);
-  const end = parseDate(props.doc.pr_term_to);
-  if (!start || !end || end < start) return 0;
-  const after = new Date(end);
-  after.setDate(after.getDate() + 1);
-  let months =
-    (after.getFullYear() - start.getFullYear()) * 12 +
-    (after.getMonth() - start.getMonth());
-  if (after.getDate() > start.getDate()) months += 1;
-  return Math.max(months, 1);
-}
-// Whole months in the committed term: how many times a month fits (#92).
-// termMonths (a part month counts) is for clause 8.3 only.
-function wholeMonths(): number {
-  const start = parseDate(props.doc.pr_term_from);
-  const end = parseDate(props.doc.pr_term_to);
-  if (!start || !end || end < start) return 0;
-  const after = new Date(end);
-  after.setDate(after.getDate() + 1);
-  let months =
-    (after.getFullYear() - start.getFullYear()) * 12 +
-    (after.getMonth() - start.getMonth());
-  if (after.getDate() < start.getDate()) months -= 1;
-  return months;
-}
-function periods(): number {
-  const frequency = props.doc.pr_frequency;
-  if (!frequency || frequency === "Once-off") return 1;
-  if (MONTHS[frequency]) {
-    return Math.max(Math.floor(wholeMonths() / MONTHS[frequency]), 1);
-  }
-  if (frequency === PER_USAGE) {
-    // The amount is the monthly cap, so every month of the term counts.
-    return Math.max(wholeMonths(), 1);
-  }
-  if (frequency === "Weekly") {
-    const start = parseDate(props.doc.pr_term_from);
-    const end = parseDate(props.doc.pr_term_to);
-    if (!start || !end || end < start) return 1;
-    const days = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-    return Math.max(Math.floor(days / 7), 1);
-  }
-  return Math.max(Number(props.doc.pr_periods) || 1, 1);
 }
 
 const currency = computed(() =>
@@ -510,29 +488,11 @@ const currency = computed(() =>
     ? props.doc.pr_currency_other || ""
     : props.doc.pr_currency || ""
 );
-
-// A cost in another currency has no VAT; it is also shown in rand (#92).
+// Which rows to show, as the fields' own conditions do: another currency has
+// no VAT rows, and is shown in rand too (#92).
 const foreign = computed(
   () => Boolean(props.doc.pr_currency) && props.doc.pr_currency !== "ZAR"
 );
-const round = (n: number) => Math.round(n * 100) / 100;
-
-const totals = computed(() => {
-  const amount = Number(props.doc.pr_amount);
-  if (props.doc.pr_amount === "" || Number.isNaN(amount)) return null;
-  const rate = foreign.value ? 0 : VAT_RATES[props.doc.pr_vat_rate] ?? 0.15;
-  let excl: number, vat: number, total: number;
-  if (!foreign.value && props.doc.pr_amount_basis === "Including VAT") {
-    total = round(amount);
-    excl = round(amount / (1 + rate));
-    vat = round(total - excl);
-  } else {
-    excl = round(amount);
-    vat = round(amount * rate);
-    total = round(excl + vat);
-  }
-  return { excl, vat, total, term: round(total * periods()) };
-});
 
 // "Total Commitment (12 months)": the periods counted, in the frequency's own
 // unit. Per usage counts months at the cap; Other says "payments".
@@ -546,7 +506,7 @@ const PERIOD_LABELS: Record<string, [string, string]> = {
 function periodsShown(): string {
   const frequency = props.doc.pr_frequency;
   if (!frequency || frequency === "Once-off") return __("once-off");
-  const n = periods();
+  const n = Number(worked.value?.periods) || 1;
   const unit = frequency === PER_USAGE ? "Monthly" : frequency;
   const [one, many] = PERIOD_LABELS[unit] || ["1 payment", "{0} payments"];
   return n === 1 ? __(one) : __(many, n);
@@ -557,121 +517,71 @@ function perPeriod(): string {
   if (frequency === PER_USAGE) return ` (${__("monthly cap")})`;
   return PERIOD_LABELS[frequency] ? ` (${__(frequency)})` : "";
 }
+function dateShown(value: string): string {
+  const d = parseDate(value);
+  return d ? d.toLocaleDateString() : "";
+}
 
 const figures = computed(() => {
-  const t = totals.value;
-  if (!t) return null;
+  const w = worked.value;
+  if (!w || w.pr_total_incl_vat === null || w.pr_total_incl_vat === undefined) {
+    return null;
+  }
   const c = currency.value ? `${currency.value} ` : "";
   const per = perPeriod();
   const count = periodsShown();
+  const zar = (n: any) =>
+    n === null || n === undefined ? "" : `ZAR ${formatMoney(n)}`;
   let rows: { label: string; value: string }[];
   if (foreign.value) {
-    const exchange = Number(props.doc.pr_exchange_rate) || 0;
-    const zar = (n: number) => `ZAR ${formatMoney(round(n * exchange))}`;
     rows = [
       {
         label: __("Amount in {0}", currency.value) + per,
-        value: c + formatMoney(t.total),
+        value: c + formatMoney(w.pr_total_incl_vat),
       },
-      { label: __("Amount in ZAR") + per, value: exchange ? zar(t.total) : "" },
+      { label: __("Amount in ZAR") + per, value: zar(w.pr_amount_zar) },
       {
         label: __("Total Commitment in {0} ({1})", currency.value, count),
-        value: c + formatMoney(t.term),
+        value: c + formatMoney(w.pr_total_term),
       },
       {
         label: __("Total Commitment in ZAR ({0})", count),
-        value: exchange ? zar(t.term) : "",
+        value: zar(w.pr_total_term_zar),
       },
     ];
   } else {
     rows = [
-      { label: __("Excluding VAT") + per, value: c + formatMoney(t.excl) },
-      { label: __("VAT"), value: c + formatMoney(t.vat) },
-      { label: __("Including VAT") + per, value: c + formatMoney(t.total) },
+      {
+        label: __("Excluding VAT") + per,
+        value: c + formatMoney(w.pr_amount_excl_vat),
+      },
+      { label: __("VAT"), value: c + formatMoney(w.pr_vat_amount) },
+      {
+        label: __("Including VAT") + per,
+        value: c + formatMoney(w.pr_total_incl_vat),
+      },
       {
         label: __("Total Commitment (incl VAT) ({0})", count),
-        value: c + formatMoney(t.term),
+        value: c + formatMoney(w.pr_total_term),
       },
     ];
   }
-  if (cancelBy.value) {
-    rows.push({ label: __("Cancel / Renew by"), value: cancelBy.value });
+  if (w.pr_cancel_by) {
+    rows.push({
+      label: __("Cancel / Renew by"),
+      value: dateShown(w.pr_cancel_by),
+    });
   }
   return rows;
 });
 
-// Cancel / renew by: 5 work days before the notice must reach the supplier.
-// Weekends only here; the server also skips public holidays, and keeps its
-// date on the ticket (company_helpdesk setup/procurement.py, cancel_by).
-function workDaysBefore(day: Date, count: number): Date {
-  const d = new Date(day);
-  while (count > 0) {
-    d.setDate(d.getDate() - 1);
-    if (d.getDay() !== 0 && d.getDay() !== 6) count -= 1;
-  }
-  return d;
-}
-function monthsBefore(day: Date, months: number): Date {
-  const first = new Date(day.getFullYear(), day.getMonth() - months, 1);
-  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-  return new Date(
-    first.getFullYear(),
-    first.getMonth(),
-    Math.min(day.getDate(), last)
-  );
-}
-// The renewal date, or else the day after the committed term ends.
-function decisionDate(): Date | null {
-  const renewal = parseDate(props.doc.pr_renewal_date);
-  if (renewal) return renewal;
-  const end = parseDate(props.doc.pr_term_to);
-  if (!end) return null;
-  end.setDate(end.getDate() + 1);
-  return end;
-}
-const cancelBy = computed<string>(() => {
-  const renewal = decisionDate();
-  const frequency = props.doc.pr_frequency;
-  if (!renewal || !frequency || frequency === "Once-off") return "";
-  const unit = props.doc.pr_notice_unit;
-  const notice = Number(props.doc.pr_notice_period) || 0;
-  let noticeBy = renewal;
-  if (unit === CALENDAR_MONTH) {
-    // A whole calendar month before the renewal date's month.
-    noticeBy = new Date(renewal.getFullYear(), renewal.getMonth() - 1, 1);
-  } else if (unit === "Months" && notice) {
-    noticeBy = monthsBefore(renewal, notice);
-  } else if (unit === "Days" && notice) {
-    noticeBy = workDaysBefore(renewal, notice);
-  }
-  return workDaysBefore(noticeBy, 5).toLocaleDateString();
-});
-
-const twoApprovers = computed(
-  () => props.doc.pr_auto_renew === "Yes" || termMonths() > 12
+// Clause 8.3 and clause 7.3, as the server flags them.
+const twoApprovers = computed(() => Boolean(worked.value?.pr_two_approvers));
+const lateBy = computed<number>(() =>
+  worked.value?.pr_late_submission ? Number(worked.value.lead_days) || 0 : 0
 );
 
-// Clause 7.3. Weekends only here; the server also skips public holidays.
-const lateBy = computed<number>(() => {
-  const start = parseDate(props.doc.pr_request_date);
-  const end = parseDate(props.doc.pr_payment_date);
-  if (!start || !end) return 0;
-  const recurring = !["", "Once-off", undefined].includes(
-    props.doc.pr_frequency
-  );
-  const foreign = (props.doc.pr_currency || "ZAR") !== "ZAR";
-  const large = (totals.value?.total || 0) > 25000;
-  const needed = recurring || foreign || large ? 10 : 5;
-  let days = 0;
-  const day = new Date(start);
-  while (day < end) {
-    day.setDate(day.getDate() + 1);
-    if (day.getDay() !== 0 && day.getDay() !== 6) days += 1;
-  }
-  return days < needed ? needed : 0;
-});
-
-// ---- the Requesting Director: the Entra Directors group, from the server (SI-03).
+// ---- the Requesting Director: the Entra group Helpdesk - Directors, from the server.
 const directors = createResource({
   url: "company_helpdesk.procurement_api.directors",
   method: "GET",
@@ -682,80 +592,33 @@ const directorOptions = computed(() => [
   ...(directors.data || []),
 ]);
 
-// ---- the creditors run (#92). A request fully approved by the month's
-// accounts cut-off (site config, the 25th by default) goes with that month's
-// creditors. The server says which run, for a request approved today, and
-// whether the payment date is before its release. The release date itself is
-// internal and never shown.
-const payRun = createResource({
-  url: "company_helpdesk.procurement_api.pay_run",
-  method: "GET",
-});
-watch(
-  () => props.doc.pr_payment_date,
-  (paymentDate) => payRun.fetch({ payment_date: paymentDate || null }),
-  { immediate: true }
-);
+// ---- the creditors run (#92): the run a request approved today joins, and
+// whether the payment is due before it. The release date itself is internal
+// and never shown.
 const payRunNote = computed<string>(() => {
-  const run = payRun.data;
+  const w = worked.value;
   // An out-of-cycle payment is released on its own, once approved.
-  if (!run || props.doc.pr_out_of_cycle === "Yes") return "";
-  const cutoff = parseDate(run.cutoff);
+  if (!w || props.doc.pr_out_of_cycle === "Yes") return "";
+  const cutoff = parseDate(w.pr_pay_run_cutoff);
   if (!cutoff) return "";
   const note = __(
     "To be paid with the creditors of {0}, the request must be fully approved by the accounts cut-off on {1}. Approved later, it goes with the next month's.",
     cutoff.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
     cutoff.toLocaleDateString()
   );
-  if (!run.out_of_cycle_needed) return note;
+  if (!w.pr_out_of_cycle_needed) return note;
   return `${note} ${__(
     "The payment is due before those creditors are paid, so it needs an out-of-cycle payment: answer Yes below and motivate it, or ask Finance for an exception."
   )}`;
 });
 
-// ---- the subject, made from the request (#92):
+// ---- the subject, made from the request by the server (#92):
 //   [payment date] [entity] [Once-off: R6 000.00] (Budgeted)
-// so the operations manager reads the priority without opening the ticket.
-// The server makes the same subject on save (company_helpdesk
-// setup/procurement.py, set_subject); this is the preview the requester sees.
-const ENTITY_PREFIXES = [
-  "HLB CBS GROUP (SOUTH AFRICA) ",
-  "HLB CBS GROUP SOUTH AFRICA ",
-];
-function dateShown(value: string): string {
-  const d = parseDate(value);
-  if (!d) return "";
-  return dateFormat
-    .replace("DD", String(d.getDate()).padStart(2, "0"))
-    .replace("MM", String(d.getMonth() + 1).padStart(2, "0"))
-    .replace("YYYY", String(d.getFullYear()));
-}
-const subjectLine = computed<string>(() => {
-  const parts: string[] = [];
-  const due = dateShown(props.doc.pr_payment_date);
-  if (due) parts.push(due);
-  let entity = String(props.doc.pr_entity || "").trim();
-  const prefix = ENTITY_PREFIXES.find((p) =>
-    entity.toUpperCase().startsWith(p)
-  );
-  if (prefix) entity = entity.slice(prefix.length);
-  if (entity) parts.push(entity);
-  const frequency = props.doc.pr_frequency || "Once-off";
-  if (totals.value) {
-    const c = currency.value || "ZAR";
-    const amount = formatMoney(totals.value.total);
-    parts.push(
-      `${frequency}: ${c === "ZAR" ? `R${amount}` : `${c} ${amount}`}`
-    );
-  } else if (props.doc.pr_frequency) {
-    parts.push(frequency);
-  }
-  if (props.doc.pr_budgeted === "Yes") parts.push("(Budgeted)");
-  return parts.join(" ").slice(0, 140);
-});
-watch(subjectLine, (line) => emit("update:subject", line), {
-  immediate: true,
-});
+watch(
+  () => worked.value?.subject,
+  (line) => emit("update:subject", line || ""),
+  { immediate: true }
+);
 
 // ---- uploads: onto the new ticket, with the rest of its attachments
 const quotationInput = ref<HTMLInputElement>();

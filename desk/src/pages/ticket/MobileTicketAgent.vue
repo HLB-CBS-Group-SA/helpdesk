@@ -6,9 +6,11 @@
       </template>
       <template #right-header>
         <div class="absolute end-0 pe-2">
-          <Dropdown :options="dropdownOptions">
+          <!-- HLB-FORK: cancel-reason / HLB-FORK: close-comment — the desktop status menu's
+               rules and dialogs (composables/useTicketStatusChange.ts). -->
+          <Dropdown :options="statusChange.statusOptions">
             <template #default="{ open }">
-              <Button :label="ticket.doc.status">
+              <Button :label="__(ticket.doc.status)">
                 <template #prefix>
                   <IndicatorIcon
                     :class="
@@ -29,6 +31,11 @@
         </div>
       </template>
     </LayoutHeader>
+    <TicketStatusDialogs
+      v-if="ticket.doc?.name"
+      :change="statusChange"
+      :ticket="ticket"
+    />
     <header
       class="flex h-12 items-center justify-between py-[7px] px-3 border-b"
       v-if="ticket.doc?.name"
@@ -135,6 +142,15 @@
                       ticket.setValue.submit({ [field]: value })
                   "
                   class="!border-0"
+                />
+                <!-- HLB-FORK: request-form — the ticket type's own form, one
+                     column, as on desktop (it renders nothing otherwise). -->
+                <TicketRequestSection
+                  v-if="ticket.doc?.name"
+                  :ticket-id="ticket.doc.name"
+                  :context="ticket.doc"
+                  compact
+                  @changed="reloadTicket(props.ticketId)"
                 />
               </div>
 
@@ -255,8 +271,13 @@ import CustomActions from "@/components/CustomActions.vue";
 import AssignTo from "@/components/ticket-agent/AssignTo.vue";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
 import TicketSLA from "@/components/ticket-agent/TicketSLA.vue";
+import TicketStatusDialogs from "@/components/ticket-agent/TicketStatusDialogs.vue";
+import { useTicketStatusChange } from "@/composables/useTicketStatusChange";
 import TicketAgentFields from "@/components/ticket/TicketAgentFields.vue";
+// HLB-FORK: request-form
+import TicketRequestSection from "@/components/ticket-agent/TicketRequestSection.vue";
 import {
+  evaluateDependsOnValue, // HLB-FORK: sidebar-fields
   parseField,
   setupCustomizations,
 } from "@/composables/formCustomisation";
@@ -285,7 +306,6 @@ import {
   TicketSymbol,
   TicketTab,
 } from "@/types";
-import { HDTicketStatus } from "@/types/doctypes";
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 
@@ -416,8 +436,22 @@ const ticketFields = computed(() => {
           (!!ticket.value.doc[f.fieldname] || !fieldMeta.read_only),
       };
     })
-    .filter(Boolean);
+    // HLB-FORK: sidebar-fields — TicketAgentFields ignores `visible`; keep only
+    // what TicketDetailsTab shows on desktop (see appliesToTicket below).
+    .filter((f) => f?.visible && appliesToTicket(f.fieldname));
 });
+
+// HLB-FORK: sidebar-fields — the same test as TicketDetailsTab: the template
+// field's depends_on holds for this ticket, or the field already has a value.
+function appliesToTicket(fieldname: string) {
+  const f = customizations.data?.custom_fields?.find(
+    (c) => c.fieldname === fieldname
+  );
+  if (!f?.depends_on) return true;
+  if (evaluateDependsOnValue(f.depends_on, ticket.value.doc)) return true;
+  const val = ticket.value.doc[fieldname];
+  return val !== null && val !== undefined && val !== "";
+}
 
 // Merged ticket doc with computed fields for TicketAgentFields
 const ticketWithFields = computed(() => ({
@@ -475,16 +509,10 @@ const breadcrumbs = computed(() => {
   return items;
 });
 
-const dropdownOptions = computed(() =>
-  ticketStatusStore.statuses.data?.map((o: HDTicketStatus) => ({
-    label: o.label_agent,
-    value: o.label_agent,
-    onClick: () => ticket.value.setValue.submit({ status: o.label_agent }),
-    icon: () =>
-      h(IndicatorIcon, {
-        class: o.parsed_color,
-      }),
-  }))
+// HLB-FORK: cancel-reason / HLB-FORK: close-comment — the plain status write was refused
+// by the server for Closed and Cancelled, which need a comment or a reason.
+const statusChange = useTicketStatusChange(ticket, () =>
+  activities.value.reload()
 );
 
 const tabs: ComputedRef<TabObject[]> = computed(() => {

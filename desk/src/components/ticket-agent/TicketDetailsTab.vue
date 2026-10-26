@@ -82,6 +82,15 @@
           @changed="onProcurementChanged"
         />
 
+        <!-- HLB-FORK: request-form — the ticket type's own form, if it has
+             one (it renders nothing otherwise). -->
+        <TicketRequestSection
+          v-if="ticket.doc?.name"
+          :ticket-id="ticket.doc.name"
+          :context="ticket.doc"
+          @changed="onProcurementChanged"
+        />
+
         <!-- Ticket Info (custom fields) -->
         <div v-if="Boolean(customFields.length)">
           <Section
@@ -166,6 +175,8 @@ import {
   parseField,
 } from "@/composables/formCustomisation";
 import { useNotifyTicketUpdate } from "@/composables/realtime";
+// HLB-FORK: type-change-warning
+import { confirmTypeChange } from "@/composables/useTypeChangeWarning";
 import { useShortcut } from "@/composables/shortcuts";
 import { getMeta } from "@/stores/meta";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
@@ -191,6 +202,8 @@ import TicketFeedback from "./TicketFeedback.vue";
 import TicketSLA from "./TicketSLA.vue";
 // HLB-FORK: procurement-signature
 import ProcurementPanel from "./ProcurementPanel.vue";
+// HLB-FORK: request-form
+import TicketRequestSection from "./TicketRequestSection.vue";
 
 const ticket = inject(TicketSymbol)!;
 const assignees = inject(AssigneeSymbol)!;
@@ -370,8 +383,10 @@ function getFieldInFormat(fieldTemplate, fieldMeta) {
     placeholder:
       fieldTemplate.placeholder ||
       `Set ${fieldMeta?.label || fieldTemplate.fieldname}...`,
-    readonly: Boolean(fieldMeta.read_only),
-    disabled: Boolean(fieldMeta.read_only),
+    // HLB-FORK: sidebar-fields — a set-only-once field is fixed once the
+    // ticket exists, as frappe enforces on save (the HR fields, app #119).
+    readonly: Boolean(fieldMeta.read_only || fieldMeta.set_only_once),
+    disabled: Boolean(fieldMeta.read_only || fieldMeta.set_only_once),
     url_method: fieldTemplate.url_method || "",
     fieldname: fieldTemplate.fieldname,
     // HLB-FORK: multi-select — TicketField shows every chosen item (app #119).
@@ -387,12 +402,32 @@ function getFieldInFormat(fieldTemplate, fieldMeta) {
 const normalize = (v: string | FieldValue) =>
   v === null || v === undefined ? "" : v;
 
+// HLB-FORK: type-change-warning — set by the warning's "Change type" button.
+let typeChangeConfirmed = false;
+
 function handleFieldUpdate(
   fieldname: string,
   value: FieldValue,
   isCoreFieldUpdated = false
 ) {
   if (normalize(ticket.value.doc[fieldname]) == normalize(value)) return;
+  // HLB-FORK: type-change-warning — an agent is asked before the type changes
+  // (owner, 2026-10-19). The team stays; the old type's answers stay hidden.
+  if (fieldname === "ticket_type" && !typeChangeConfirmed) {
+    const from = ticket.value.doc.ticket_type;
+    confirmTypeChange(
+      __(
+        "The ticket keeps its team. Answers that belong to {0} are kept, but no longer shown.",
+        [__(from)]
+      ),
+      () => {
+        typeChangeConfirmed = true;
+        handleFieldUpdate(fieldname, value, isCoreFieldUpdated);
+      }
+    );
+    return;
+  }
+  typeChangeConfirmed = false;
   if (isCoreFieldUpdated) {
     const label = getField(fieldname)?.label || fieldname;
     notifyTicketUpdate(label, value as string);
