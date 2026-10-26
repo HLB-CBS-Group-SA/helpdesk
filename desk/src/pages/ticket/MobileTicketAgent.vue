@@ -176,6 +176,15 @@
                   "
                   class="!border-0"
                 />
+                <!-- HLB-FORK: request-form — the ticket type's own form, one
+                     column, as on desktop (it renders nothing otherwise). -->
+                <TicketRequestSection
+                  v-if="ticket.doc?.name"
+                  :ticket-id="ticket.doc.name"
+                  :context="ticket.doc"
+                  compact
+                  @changed="reloadTicket(props.ticketId)"
+                />
               </div>
 
               <!-- Rest Activities -->
@@ -299,6 +308,8 @@ import TicketSLA from "@/components/ticket-agent/TicketSLA.vue";
 import TicketStatusDialogs from "@/components/ticket-agent/TicketStatusDialogs.vue";
 import { useTicketStatusChange } from "@/composables/useTicketStatusChange";
 import TicketAgentFields from "@/components/ticket/TicketAgentFields.vue";
+// HLB-FORK: request-form
+import TicketRequestSection from "@/components/ticket-agent/TicketRequestSection.vue";
 import {
   createToast,
   evaluateDependsOnValue, // HLB-FORK: sidebar-fields
