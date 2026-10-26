@@ -73,6 +73,8 @@ const component = computed(() => {
   // See customisations.manifest.json id=ui-multi-select.
   if (props.field.hlb_multiple) {
     return h(MultiSelect, {
+      // A read-only form (a set-only-once field, app #119): chips, no picker.
+      readonly: Boolean(props.field.disabled),
       options: props.field.url_method
         ? apiOptions.data
         : props.field.options

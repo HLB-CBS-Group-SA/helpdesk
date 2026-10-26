@@ -76,9 +76,18 @@
       <ProcurementForm
         v-if="isProcurement"
         v-model:files="procurementFiles"
-        :doc="templateFields"
-        :fields="visibleFields"
+        :doc="requestValues"
+        :fields="procurementFields"
         @update:subject="(line) => (subject = line)"
+      />
+      <!-- HLB-FORK: request-form — any other type with its own form (HR
+           Onboarding / Offboarding) is drawn from its DocType. -->
+      <TicketRequestForm
+        v-else-if="requestForm.data?.fields?.length"
+        :fields="requestForm.data.fields"
+        :values="requestValues"
+        :context="templateFields"
+        @change="(e) => (requestValues[e.fieldname] = e.value)"
       />
       <!-- existing fields -->
       <div
@@ -224,7 +233,10 @@ import {
   setupCustomizations,
 } from "@/composables/formCustomisation";
 // HLB-FORK: type-change-warning
-import { answersOf, confirmTypeChange } from "@/composables/useTypeChangeWarning";
+import {
+  answersOf,
+  confirmTypeChange,
+} from "@/composables/useTypeChangeWarning";
 import { useAuthStore } from "@/stores/auth";
 import { globalStore } from "@/stores/globalStore";
 import { capture } from "@/telemetry";
@@ -255,6 +267,12 @@ import SearchArticles from "../../components/SearchArticles.vue";
 // HLB-FORK: additional-requirements
 import AdditionalRequirements from "../../components/ticket/AdditionalRequirements.vue";
 import ProcurementForm from "../../components/ticket/ProcurementForm.vue";
+// HLB-FORK: request-form
+import TicketRequestForm from "../../components/ticket/TicketRequestForm.vue";
+import {
+  missingRequired,
+  requestSections,
+} from "@/composables/useTicketRequest";
 const TicketTextEditor = defineAsyncComponent(
   () => import("./TicketTextEditor.vue")
 );
@@ -293,6 +311,30 @@ const isProcurement = computed(
     PROCUREMENT_TYPE
 );
 const procurementFiles = ref([]);
+
+// HLB-FORK: request-form — a ticket type with its own form keeps it in its own
+// DocType (company_helpdesk hd_ticket/requests.py, owner 2026-10-22). Its
+// fields come from the server for the chosen type; its answers are kept apart
+// from the ticket's and sent with it as `hlb_request`.
+const requestValues = reactive<Record<string, any>>({});
+const requestForm = createResource({
+  url: "company_helpdesk.api.request_form",
+  method: "GET",
+});
+watch(
+  () => (templateFields as Record<string, string>)["ticket_type"],
+  (ticketType) => {
+    for (const key of Object.keys(requestValues)) delete requestValues[key];
+    if (ticketType) requestForm.fetch({ ticket_type: ticketType });
+    else requestForm.data = null;
+  }
+);
+// ProcurementForm draws its own layout from these fields (sections A to G).
+const procurementFields = computed(() =>
+  requestSections(requestForm.data?.fields || [], requestValues, false).flatMap(
+    (section) => section.fields
+  )
+);
 
 // HLB-FORK: subject-per-type — let a ticket type rename Subject.
 //
@@ -416,14 +458,17 @@ watch(
     }
     if (!before || !now || now === before) return;
     const fields = templateFields as Record<string, any>;
-    const answered = answersOf(before, fields);
+    // HLB-FORK: request-form — the type's own form's answers count too.
+    const answered = answersOf(before, { ...fields, ...requestValues });
     if (!answered.length) return;
     revertingType = true;
     fields["ticket_type"] = before;
     confirmTypeChange(
       __("The answers you gave for {0} will be removed.", [__(before)]),
       () => {
-        answered.forEach((f) => (fields[f] = null));
+        answered.forEach((f) => {
+          if (f in fields) fields[f] = null;
+        });
         fields["ticket_type"] = now;
       }
     );
@@ -509,10 +554,11 @@ const HR_TICKET_TYPE = "HR Onboarding / Offboarding";
 watch(
   () => {
     const fields = templateFields as Record<string, string>;
+    // HLB-FORK: request-form — the full name is on the HR form.
     return [
       fields["ticket_type"],
       fields["hr_subtype"],
-      fields["hr_full_name"],
+      requestValues["hr_full_name"],
     ];
   },
   ([ticketType, subtype, fullName]) => {
@@ -681,6 +727,10 @@ const ticket = createResource({
       subject: composeSubject(),
       template: props.templateId,
       ...templateFields,
+      // HLB-FORK: request-form — the type's own form, inserted with the ticket.
+      ...(requestForm.data?.fields?.length
+        ? { hlb_request: { ...requestValues } }
+        : {}),
     },
     // HLB-FORK: procurement-form — the quotations and the Director's signed
     // approval are uploaded by the form and attached like any other file.
@@ -716,6 +766,13 @@ const ticket = createResource({
         return `${label} is required`;
       }
     }
+    // HLB-FORK: request-form — the type's own form, by its own conditions.
+    // The server checks the same again (hd_ticket/request_base.py).
+    const missing = missingRequired(requestForm.data?.fields || [], {
+      ...templateFields,
+      ...requestValues,
+    });
+    if (missing) return `${__(missing.label)} is required`;
   },
   onSuccess: (data) => {
     router.push({

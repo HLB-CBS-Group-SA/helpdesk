@@ -10,7 +10,10 @@
        after a rebase. This adds only "append on pick" and "chips you can remove".
        See customisations.manifest.json id=ui-multi-select. -->
   <div class="w-full space-y-1.5">
+    <!-- HLB-FORK: multi-select — read-only (a set-only-once field after
+         submission, app #119): the chips without the picker or the ✕. -->
     <Autocomplete
+      v-if="!readonly"
       :options="available"
       :value="null"
       :placeholder="placeholder"
@@ -18,18 +21,20 @@
       @change="add"
     />
     <div v-if="selected.length" class="flex flex-wrap gap-1.5">
-      <button
+      <component
+        :is="readonly ? 'span' : 'button'"
         v-for="value in selected"
         :key="value"
-        type="button"
-        class="flex max-w-full items-center gap-1 rounded bg-surface-gray-2 px-2 py-1 text-left text-p-sm text-ink-gray-7 hover:bg-surface-gray-3"
-        @click="remove(value)"
+        :type="readonly ? undefined : 'button'"
+        class="flex max-w-full items-center gap-1 rounded bg-surface-gray-2 px-2 py-1 text-left text-p-sm text-ink-gray-7"
+        :class="!readonly && 'hover:bg-surface-gray-3'"
+        @click="!readonly && remove(value)"
       >
         <!-- HLB-FORK: multi-select — a long "Name <address>" wraps inside its
              chip, left-aligned, instead of centring and overflowing the field. -->
         <span class="min-w-0 break-words">{{ labelFor(value) }}</span>
-        <LucideX class="size-3 shrink-0" aria-hidden="true" />
-      </button>
+        <LucideX v-if="!readonly" class="size-3 shrink-0" aria-hidden="true" />
+      </component>
     </div>
   </div>
 </template>
@@ -48,6 +53,7 @@ const props = defineProps<{
   options?: Option[];
   value?: string;
   placeholder?: string;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits(["change"]);
