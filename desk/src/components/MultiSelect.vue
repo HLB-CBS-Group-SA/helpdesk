@@ -5,20 +5,21 @@
        both (a joiner goes on several distribution lists and needs a laptop AND a
        monitor), and making them free text would lose the live M365 list.
 
-       Built AROUND the existing Autocomplete rather than replacing it, so the
-       search, filtering and keyboard handling stay upstream's and keep working
-       after a rebase. This adds only "append on pick" and "chips you can remove".
+       Built AROUND frappe-ui's Combobox (upstream's own picker since v1.31) rather
+       than replacing it, so search, filtering and keyboard handling stay upstream's.
+       This adds only "append on pick" and "chips you can remove". v-model holds
+       the joined string, as UniInput and TicketField expect.
        See customisations.manifest.json id=ui-multi-select. -->
   <div class="w-full space-y-1.5">
     <!-- HLB-FORK: multi-select — read-only (a set-only-once field after
          submission, app #119): the chips without the picker or the ✕. -->
-    <Autocomplete
+    <Combobox
       v-if="!readonly"
       :options="available"
-      :value="null"
+      :model-value="null"
       :placeholder="placeholder"
       size="sm"
-      @change="add"
+      @update:model-value="add"
     />
     <div v-if="selected.length" class="flex flex-wrap gap-1.5">
       <component
@@ -26,7 +27,7 @@
         v-for="value in selected"
         :key="value"
         :type="readonly ? undefined : 'button'"
-        class="flex max-w-full items-center gap-1 rounded bg-surface-gray-2 px-2 py-1 text-left text-p-sm text-ink-gray-7"
+        class="flex max-w-full items-center gap-1 rounded-4 bg-surface-gray-2 px-2 py-1 text-left text-p-sm text-ink-gray-7"
         :class="!readonly && 'hover:bg-surface-gray-3'"
         @click="!readonly && remove(value)"
       >
@@ -40,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { Autocomplete } from "@/components";
+import { Combobox } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
 import { computed } from "vue";
 
@@ -51,12 +52,12 @@ interface Option {
 
 const props = defineProps<{
   options?: Option[];
-  value?: string;
+  modelValue?: string;
   placeholder?: string;
   readonly?: boolean;
 }>();
 
-const emit = defineEmits(["change"]);
+const emit = defineEmits<{ (e: "update:modelValue", value: string): void }>();
 
 // Stored as one string so the column stays Small Text — deliberately NOT a
 // Select, because frappe's _validate_selects throws on a value outside the
@@ -68,7 +69,7 @@ const emit = defineEmits(["change"]);
 const SEPARATOR = ", ";
 
 const selected = computed<string[]>(() =>
-  (props.value || "")
+  (props.modelValue || "")
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean)
@@ -88,7 +89,7 @@ function labelFor(value: string): string {
 // ({ value: "" }, falsy) stored the whole object instead of "", and the field
 // vanished from the form (app #119).
 function commit(values: string[]): void {
-  emit("change", values.join(SEPARATOR));
+  emit("update:modelValue", values.join(SEPARATOR));
 }
 
 function add(option: Option | string | null): void {

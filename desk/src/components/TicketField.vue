@@ -151,17 +151,17 @@ function combobox(options: Option[]) {
 
 const component = computed(() => {
   // HLB-FORK: multi-select — before url_method, as on the intake form, so the
-  // agent view shows every chosen item, not one Autocomplete value (app #119).
+  // agent view shows every chosen item, not one picker value (app #119).
   if (props.field.hlb_multiple) {
     return h(MultiSelect, {
-      value: props.value,
       options: props.field.url_method
         ? apiOptions.data
         : (props.field.options || "")
             .split("\n")
             .filter(Boolean)
             .map((o: string) => ({ label: o, value: o })),
-      onChange: (value: string) => emitUpdate(props.field.fieldname, value),
+      "onUpdate:modelValue": (value: string) =>
+        emitUpdate(props.field.fieldname, value),
     });
   } else if (props.field.url_method) {
     return combobox(apiOptions.data || []);
@@ -226,7 +226,7 @@ let linkPickerOpen = false;
 let linkModel: FieldValue = null;
 
 const listeners = computed(() => {
-  // HLB-FORK: multi-select — MultiSelect commits through its own onChange.
+  // HLB-FORK: multi-select — MultiSelect commits through its own v-model.
   if (props.field.hlb_multiple) return {};
   const fieldtype = props.field.fieldtype;
   if ([...textFields, ...numberFields].includes(fieldtype)) {

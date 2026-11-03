@@ -93,9 +93,9 @@
        bubble (#52). Offered to Super Admins only. -->
   <Dialog
     v-model="deleteDialog.show"
-    :options="{ title: __('Delete ticket #{0}', [ticket?.doc?.name]) }"
+    :title="__('Delete ticket #{0}', [ticket?.doc?.name])"
   >
-    <template #body-content>
+    <template #default>
       <p class="text-p-sm text-ink-gray-6 mb-3">
         {{
           __(
@@ -119,7 +119,7 @@
         class="w-full"
         variant="solid"
         theme="red"
-        icon-left="trash-2"
+        icon-left="lucide-trash-2"
         :loading="deleteDialog.loading"
         :disabled="deleteDialog.reason.trim().length < 5"
         :label="__('Delete')"
@@ -140,6 +140,7 @@ import TicketMergeModal from "@/components/ticket/TicketMergeModal.vue";
 import TicketRepeatDialog from "@/components/ticket-agent/TicketRepeatDialog.vue";
 import TicketStatusDialogs from "@/components/ticket-agent/TicketStatusDialogs.vue";
 import { useTicketStatusChange } from "@/composables/useTicketStatusChange";
+import { reloadTicketFeed } from "@/composables/useTicket";
 import { showMergeModal } from "@/pages/ticket/modalStates";
 import {
   createToast,
@@ -204,8 +205,10 @@ const showSubjectDialog = ref(false);
 
 // HLB-FORK: cancel-reason / HLB-FORK: close-comment — the status menu and its two
 // dialogs, shared with the mobile page (composables/useTicketStatusChange.ts).
-// No timeline reload: since v1.31 the shared feed reloads itself on doc_update.
-const statusChange = useTicketStatusChange(ticket, () => {});
+// v1.31 has no activities resource; reload the shared timeline instead.
+const statusChange = useTicketStatusChange(ticket, () =>
+  reloadTicketFeed(ticket.value.name)
+);
 const cancelContext = statusChange.cancelContext;
 
 const breadcrumbs = computed(() => {

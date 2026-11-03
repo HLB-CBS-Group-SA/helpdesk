@@ -15,12 +15,9 @@
 <template>
   <Dialog
     v-model="open"
-    :options="{
-      title: __('Set batch'),
-      size: 'md',
-    }"
+    :title="__('Set batch')" size="md"
   >
-    <template #body-content>
+    <template #default>
       <div class="flex flex-col gap-3">
         <p class="text-p-sm text-ink-gray-6">
           {{

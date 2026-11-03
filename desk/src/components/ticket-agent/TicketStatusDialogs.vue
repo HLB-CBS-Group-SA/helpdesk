@@ -7,13 +7,13 @@
        See customisations.manifest.json id=ui-cancel-reason. -->
   <Dialog
     v-model="change.cancelDialog.show"
-    :options="{
-      title: change.cancelDialog.declining
+    :title="
+      change.cancelDialog.declining
         ? __('Decline request')
-        : __('Cancel ticket'),
-    }"
+        : __('Cancel ticket')
+    "
   >
-    <template #body-content>
+    <template #default>
       <p class="text-p-sm text-ink-gray-6 mb-3">
         {{
           change.cancelDialog.declining
@@ -54,9 +54,9 @@
        a close without it (app hd_ticket/closing.py, manifest ui-close-comment). -->
   <Dialog
     v-model="change.closeDialog.show"
-    :options="{ title: __('Close ticket #{0}', [ticket?.doc?.name]) }"
+    :title="__('Close ticket #{0}', [ticket?.doc?.name])"
   >
-    <template #body-content>
+    <template #default>
       <p class="text-p-sm text-ink-gray-6 mb-3">
         {{
           __(

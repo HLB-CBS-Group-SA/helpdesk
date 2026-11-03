@@ -16,17 +16,18 @@
         </div>
       </template>
       <template #right-header>
-        <NestedPopover placement="bottom-end">
-          <template #target>
+        <!-- HLB-FORK: my-board — frappe-ui Popover; v1.31 removed NestedPopover -->
+        <Popover bare :offset="8" align="end">
+          <template #trigger>
             <Button :label="__('Columns')" variant="subtle">
               <template #prefix>
                 <ColumnsIcon class="h-4" />
               </template>
             </Button>
           </template>
-          <template #body>
+          <template #default>
             <div
-              class="my-2 p-1.5 min-w-56 rounded-lg bg-surface-elevation-2 shadow-2xl ring-1 ring-outline-elevation-2"
+              class="p-1.5 min-w-56 rounded-6 bg-surface-elevation-2 shadow-2xl ring-1 ring-outline-elevation-2"
             >
               <Draggable
                 :model-value="settingsRows"
@@ -36,7 +37,7 @@
               >
                 <template #item="{ element }">
                   <div
-                    class="flex cursor-grab items-center gap-2 rounded px-2 py-1.5 text-base text-ink-gray-8 hover:bg-surface-gray-2"
+                    class="flex cursor-grab items-center gap-2 rounded-4 px-2 py-1.5 text-base text-ink-gray-8 hover:bg-surface-gray-2"
                   >
                     <DragIcon class="h-3.5 shrink-0" />
                     <FormControl
@@ -66,7 +67,7 @@
               </div>
             </div>
           </template>
-        </NestedPopover>
+        </Popover>
         <Button
           :label="__('Refresh')"
           variant="subtle"
@@ -92,7 +93,7 @@
         <div
           v-for="column in columns"
           :key="column.status"
-          class="flex flex-col w-72 shrink-0 rounded-lg bg-surface-gray-1"
+          class="flex flex-col w-72 shrink-0 rounded-6 bg-surface-gray-1"
           :class="{ 'ring-2 ring-outline-gray-4': dragOver === column.status }"
           @dragover.prevent="dragOver = column.status"
           @dragleave="dragOver = null"
@@ -112,7 +113,7 @@
               v-for="t in column.tickets"
               :key="t.name"
               draggable="true"
-              class="group rounded-md border border-outline-gray-1 bg-surface-elevation-1 p-2.5 shadow-sm cursor-pointer hover:ring-1 hover:ring-outline-gray-3"
+              class="group rounded-5 border border-outline-gray-1 bg-surface-elevation-1 p-2.5 shadow-sm cursor-pointer hover:ring-1 hover:ring-outline-gray-3"
               @dragstart="dragged = t.name"
               @dragend="dragged = null"
               @click="openTicket(t.name)"
@@ -122,7 +123,7 @@
                   #{{ t.name }}
                 </span>
                 <div class="ml-auto" @click.stop>
-                  <Dropdown :options="moveOptions(t)" placement="right">
+                  <Dropdown :options="moveOptions(t)" align="end">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -164,7 +165,6 @@
 <script setup lang="ts">
 import { LayoutHeader } from "@/components";
 import { ColumnsIcon, DragIcon, IndicatorIcon } from "@/components/icons";
-import NestedPopover from "@/components/NestedPopover.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useTicketStatusStore } from "@/stores/ticketStatus";
 import { __ } from "@/translation";
@@ -177,6 +177,7 @@ import {
   createResource,
   Dropdown,
   FormControl,
+  Popover,
   toast,
 } from "frappe-ui";
 import { storeToRefs } from "pinia";

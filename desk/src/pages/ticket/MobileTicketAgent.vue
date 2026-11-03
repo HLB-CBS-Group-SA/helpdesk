@@ -320,6 +320,7 @@ import { useScreenSize } from "@/composables/screen";
 import { useActiveTabManager } from "@/composables/useActiveTabManager";
 import {
   reloadTicket,
+  reloadTicketFeed,
   revalidateTicket,
   useTicket,
 } from "@/composables/useTicket";
@@ -475,11 +476,10 @@ const ticketFields = computed(() => {
 // HLB-FORK: sidebar-fields — the same test as TicketDetailsTab: the template
 // field's depends_on holds for this ticket, or the field already has a value.
 function appliesToTicket(fieldname: string) {
-  const f = customizations.data?.custom_fields?.find(
-    (c) => c.fieldname === fieldname
-  );
-  if (!f?.depends_on) return true;
-  if (evaluateDependsOnValue(f.depends_on, ticket.value.doc)) return true;
+  // v1.31 sends no depends_on per row; it comes from the meta.
+  const dependsOn = getField(fieldname)?.depends_on;
+  if (!dependsOn) return true;
+  if (evaluateDependsOnValue(dependsOn, ticket.value.doc)) return true;
   const val = ticket.value.doc[fieldname];
   return val !== null && val !== undefined && val !== "";
 }
@@ -538,8 +538,10 @@ const breadcrumbs = computed(() => {
 
 // HLB-FORK: cancel-reason / HLB-FORK: close-comment — the plain status write was refused
 // by the server for Closed and Cancelled, which need a comment or a reason.
-// No timeline reload: since v1.31 the shared feed reloads itself on doc_update.
-const statusChange = useTicketStatusChange(ticket, () => {});
+// v1.31 has no activities resource; reload the shared timeline instead.
+const statusChange = useTicketStatusChange(ticket, () =>
+  reloadTicketFeed(ticket.value.name)
+);
 
 const tabs: ComputedRef<TabObject[]> = computed(() => {
   const _tabs = [

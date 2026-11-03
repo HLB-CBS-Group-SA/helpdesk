@@ -6,9 +6,9 @@
 <template>
   <Dialog
     v-model="show"
-    :options="{ title: __('Repeat ticket #{0}', [ticket]) }"
+    :title="__('Repeat ticket #{0}', [ticket])"
   >
-    <template #body-content>
+    <template #default>
       <p class="text-p-sm text-ink-gray-6 mb-4">
         {{
           __(

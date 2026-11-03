@@ -44,7 +44,7 @@
     </ol>
     <div
       v-else
-      class="rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-8"
+      class="rounded-4 border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-8"
     >
       {{ __("Declined.") }}
     </div>
@@ -65,7 +65,7 @@
       <div
         v-for="(s, i) in ctx.signatures"
         :key="i"
-        class="flex items-center gap-3 rounded border border-outline-gray-2 px-3 py-2"
+        class="flex items-center gap-3 rounded-4 border border-outline-gray-2 px-3 py-2"
       >
         <img
           v-if="s.image"
@@ -141,7 +141,7 @@
          the same approver, until the board decides (2026-10-22). -->
     <div
       v-if="ctx.referred"
-      class="rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-8"
+      class="rounded-4 border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-8"
     >
       {{
         __(
@@ -265,9 +265,9 @@
       />
       <Dialog
         v-model="showReferDialog"
-        :options="{ title: __('Refer to the board?') }"
+        :title="__('Refer to the board?')"
       >
-        <template #body-content>
+        <template #default>
           <p class="text-p-sm text-ink-gray-6">
             {{
               __(

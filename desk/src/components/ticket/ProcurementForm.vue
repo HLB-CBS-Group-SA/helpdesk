@@ -139,7 +139,7 @@
       <!-- the worked-out figures, under section C -->
       <div
         v-if="section.figures && figures"
-        class="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm sm:grid-cols-4"
+        class="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 rounded-4 border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm sm:grid-cols-4"
       >
         <template v-for="row in figures" :key="row.label">
           <span class="text-ink-gray-6">{{ row.label }}</span>
@@ -684,14 +684,14 @@ const FileList = defineComponent({
                 {
                   key: f.file_url,
                   class:
-                    "flex items-center gap-2 rounded bg-surface-gray-2 px-2 py-1 text-p-sm text-ink-gray-7",
+                    "flex items-center gap-2 rounded-4 bg-surface-gray-2 px-2 py-1 text-p-sm text-ink-gray-7",
                 },
                 [
                   h("span", { class: "truncate flex-1" }, f.file_name),
                   h(Button, {
                     variant: "ghost",
                     size: "sm",
-                    icon: "x",
+                    icon: "lucide-x",
                     "aria-label": __("Remove"),
                     onClick: () => send("remove", f),
                   }),

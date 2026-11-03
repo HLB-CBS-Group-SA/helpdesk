@@ -152,9 +152,9 @@
        plain confirm + `frappe.desk.reportview.delete_items`. -->
   <Dialog
     v-model="deleteReason.show"
-    :options="{ title: __('Delete ticket(s)') }"
+    :title="__('Delete ticket(s)')"
   >
-    <template #body-content>
+    <template #default>
       <p class="text-p-sm text-ink-gray-6 mb-3">
         {{
           __(
@@ -180,7 +180,7 @@
         class="w-full"
         variant="solid"
         theme="red"
-        icon-left="trash-2"
+        icon-left="lucide-trash-2"
         :loading="deleteReason.loading"
         :disabled="deleteReason.text.trim().length < 5"
         :label="__('Delete')"

@@ -203,6 +203,7 @@ import TicketFeedback from "./TicketFeedback.vue";
 import TicketSLA from "./TicketSLA.vue";
 // HLB-FORK: procurement-signature
 import ProcurementPanel from "./ProcurementPanel.vue";
+import { reloadTicketFeed } from "@/composables/useTicket";
 // HLB-FORK: request-form
 import TicketRequestSection from "./TicketRequestSection.vue";
 
@@ -216,7 +217,7 @@ const recentSimilarTickets = inject(RecentSimilarTicketsSymbol)!;
 function onProcurementChanged() {
   ticket.value.reload();
   assignees.value.reload();
-  activities.value.reload();
+  reloadTicketFeed(ticket.value.name);
 }
 const { getFields, getField } = getMeta("HD Ticket");
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
@@ -271,7 +272,9 @@ const customFields = computed(() => {
   // ticket type: `cancel_reason` is gated by STATUS, and must appear at the
   // moment somebody cancels. The intake form evaluates the same strings.
   customFields = customFields.filter((f) => {
-    const dep = f.depends_on || "";
+    // v1.31 sends only fieldname/required/placeholder/url_method per row, so
+    // the expression comes from the meta (custom fields and property setters).
+    const dep = getField(f.fieldname)?.depends_on || "";
     if (!dep) return true;
     if (evaluateDependsOnValue(dep, ticket.value.doc)) return true;
     const val = ticket.value.doc[f.fieldname];

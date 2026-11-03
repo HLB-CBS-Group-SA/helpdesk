@@ -187,9 +187,7 @@ def merge_ticket(source: str, target: str):
             filters={"reference_doctype": "HD Ticket", "reference_name": source},
             pluck="name",
         )
-        duplicate_list_retain_timestamp(
-            "Comment", source_comments, target, controller
-        )
+        duplicate_list_retain_timestamp("Comment", source_comments, target, controller)
 
         source_communications = frappe.get_all(
             "Communication",

@@ -67,7 +67,7 @@
            to hover over. See customisations.manifest.json id=ui-type-notice. -->
       <div
         v-if="ticketTypeNotice"
-        class="rounded border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-6"
+        class="rounded-4 border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-6"
       >
         {{ ticketTypeNotice }}
       </div>

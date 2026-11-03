@@ -6,7 +6,7 @@
        hash of what was signed): see company_helpdesk procurement_api.py. -->
   <div class="flex flex-col gap-2">
     <TabButtons
-      :buttons="[
+      :options="[
         { label: __('Draw'), value: 'Drawn' },
         { label: __('Type'), value: 'Typed' },
       ]"
@@ -20,7 +20,7 @@
       :modelValue="typedName"
       @update:modelValue="typeName"
     />
-    <div class="relative rounded border border-outline-gray-3 bg-surface-base">
+    <div class="relative rounded-4 border border-outline-gray-3 bg-surface-base">
       <canvas
         ref="canvas"
         class="block w-full touch-none"
