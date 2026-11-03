@@ -308,6 +308,63 @@
       </div>
     </div>
 
+    <!-- HLB-FORK: procurement-handover — a Super Admin hands the open decision
+         to another PMO Approver, with a reason (2026-11-03). The server offers it. -->
+    <div v-if="can.hand_over">
+      <Button
+        :label="__('Hand to another approver')"
+        icon-left="lucide-arrow-right-left"
+        :loading="busy"
+        @click="showHandOverDialog = true"
+      />
+      <Dialog
+        v-model="showHandOverDialog"
+        :options="{ title: __('Hand to another approver') }"
+      >
+        <template #body-content>
+          <div class="flex flex-col gap-3">
+            <p class="text-p-sm text-ink-gray-6">
+              {{
+                __(
+                  "The decision is with {0}. The approver you choose decides instead. You cannot decide on this request yourself.",
+                  ctx.hand_over?.current?.name || "-"
+                )
+              }}
+            </p>
+            <FormControl
+              type="select"
+              :label="__('New approver')"
+              :options="handOverOptions"
+              v-model="handOverTo"
+            />
+            <FormControl
+              type="textarea"
+              :rows="2"
+              :label="__('Reason (required)')"
+              v-model="handOverReason"
+            />
+          </div>
+        </template>
+        <template #actions>
+          <div class="flex justify-end gap-2">
+            <Button :label="__('Cancel')" @click="showHandOverDialog = false" />
+            <Button
+              variant="solid"
+              :label="__('Hand over')"
+              :disabled="!handOverTo || !handOverReason.trim()"
+              :loading="busy"
+              @click="
+                run('hand_over', {
+                  approver: handOverTo,
+                  reason: handOverReason.trim(),
+                })
+              "
+            />
+          </div>
+        </template>
+      </Dialog>
+    </div>
+
     <!-- Approved, Processing -->
     <div v-if="can.start_processing">
       <Button
@@ -416,6 +473,17 @@ const approverOptions = computed(() => [
   })),
 ]);
 
+// HLB-FORK: procurement-handover — the PMO Approvers the server allows.
+const handOverOptions = computed(() => [
+  { label: "", value: "" },
+  ...(ctx.value.hand_over?.approvers || []).map(
+    (a: { user: string; name: string }) => ({
+      label: `${a.name} (${a.user})`,
+      value: a.user,
+    })
+  ),
+]);
+
 // ---- the decision
 const decision = ref("");
 const amount = ref<number | null>(null);
@@ -432,6 +500,10 @@ const boardMinutes = ref<{ file_url: string; file_name: string } | null>(null);
 const uploadingMinutes = ref(false);
 const minutesInput = ref<HTMLInputElement | null>(null);
 const showReferDialog = ref(false);
+// HLB-FORK: procurement-handover
+const showHandOverDialog = ref(false);
+const handOverTo = ref("");
+const handOverReason = ref("");
 // A fresh pad after each step: the pad keeps its own canvas and typed name.
 const padKey = ref(0);
 
@@ -449,6 +521,10 @@ function resetForm() {
   boardDecision.value = "";
   boardMinutes.value = null;
   showReferDialog.value = false;
+  // HLB-FORK: procurement-handover
+  showHandOverDialog.value = false;
+  handOverTo.value = "";
+  handOverReason.value = "";
   padKey.value += 1;
 }
 
@@ -512,6 +588,8 @@ const METHODS = [
   "start_processing",
   "mark_loaded",
   "mark_paid",
+  // HLB-FORK: procurement-handover
+  "hand_over",
 ];
 const steps = Object.fromEntries(
   METHODS.map((method) => [
