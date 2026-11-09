@@ -1,4 +1,4 @@
-// HLB-FORK: cancel-reason / HLB-FORK: close-comment — the agent status menu, shared by the
+// HLB-FORK: cancel-reason / close-comment / due-date-status — the agent status menu, shared by the
 // desktop header and the mobile page so both apply the same rules.
 //
 // Cancelled asks for a reason and Closed asks for a comment (app
@@ -109,8 +109,59 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
     });
   }
 
+  // HLB-FORK: due-date-status — the statuses that need a reason and a Due date /
+  // Meeting date ask for both and send them with the status in one save (#192).
+  const dueDialog = reactive({
+    show: false,
+    status: "",
+    reason: "",
+    date: "",
+    error: "",
+  });
+  const dueReasonMinLength = computed(
+    () => cancelContext.data?.due_reason_min_length ?? 1
+  );
+
+  function openDueDialog(status: string) {
+    dueDialog.status = status;
+    dueDialog.reason = ticket.value.doc?.hlb_due_reason || "";
+    dueDialog.date = ticket.value.doc?.hlb_due_date || "";
+    dueDialog.error = "";
+    dueDialog.show = true;
+  }
+
+  function confirmDue() {
+    const reason = dueDialog.reason.trim();
+    if (reason.length < dueReasonMinLength.value || !dueDialog.date) return;
+    dueDialog.error = "";
+    const status = dueDialog.status;
+    notifyTicketUpdate("Status", status);
+    ticket.value.setValue.submit(
+      { status, hlb_due_reason: reason, hlb_due_date: dueDialog.date },
+      {
+        onSuccess() {
+          dueDialog.show = false;
+          changed();
+        },
+        onError(error: any) {
+          dueDialog.error = errorText(
+            error,
+            __("Could not change the status.")
+          );
+        },
+      }
+    );
+  }
+
   function choose(status: string) {
     const current = ticket.value.doc.status;
+    if (
+      status !== current &&
+      (cancelContext.data?.due_date_statuses || []).includes(status)
+    ) {
+      openDueDialog(status);
+      return;
+    }
     if (status === CANCELLED && current !== CANCELLED) {
       openCancelDialog();
       return;
@@ -171,9 +222,12 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
     closeDialog,
     closeWithComment,
     closeMinLength,
+    dueDialog,
+    dueReasonMinLength,
     statusOptions,
     confirmCancel,
     confirmClose,
+    confirmDue,
   });
 }
 
