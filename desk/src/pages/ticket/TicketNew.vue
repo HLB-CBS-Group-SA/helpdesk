@@ -694,10 +694,10 @@ const customOnChange = computed(() => template.data?._customOnChange);
 // nothing left to except. Removed rather than left inert: an unused branch in
 // a forked file is one more thing to re-land on the next rebase for no
 // behaviour. See customisations.manifest.json id=ui-customer-priority.
+// HLB-FORK: intake-agent-fields — agent-only fields (hide_from_customer) are the agent's
+// workflow on an existing ticket, never asked when raising one, agent or not (app 2026-11-15).
 const visibleFields = computed(() => {
-  let _fields = template.data?.fields?.filter(
-    (f) => !isCustomerPortal.value || !f.hide_from_customer
-  );
+  let _fields = template.data?.fields?.filter((f) => !f.hide_from_customer);
   if (!_fields) return [];
   return _fields.map((field) => parseField(field, templateFields));
 });
