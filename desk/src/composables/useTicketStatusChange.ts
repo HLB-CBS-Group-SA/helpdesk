@@ -118,13 +118,26 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
     date: "",
     error: "",
   });
+  // Labels and minimum per status: Meeting scheduled asks for the meeting date
+  // and whom it is with (cancel_context.due_fields, app 2026-11-15).
+  const dueFields = computed(
+    () => cancelContext.data?.due_fields?.[dueDialog.status] || {}
+  );
   const dueReasonMinLength = computed(
-    () => cancelContext.data?.due_reason_min_length ?? 1
+    () =>
+      dueFields.value.reason_min_length ??
+      cancelContext.data?.due_reason_min_length ??
+      1
   );
 
   function openDueDialog(status: string) {
+    // Keep the stored reason only for the same kind of question: an old
+    // reason is not whom a meeting is with.
+    const fields = cancelContext.data?.due_fields || {};
+    const current = fields[ticket.value.doc?.status]?.reason_label;
+    const sameKind = current && current === fields[status]?.reason_label;
     dueDialog.status = status;
-    dueDialog.reason = ticket.value.doc?.hlb_due_reason || "";
+    dueDialog.reason = sameKind ? ticket.value.doc?.hlb_due_reason || "" : "";
     dueDialog.date = ticket.value.doc?.hlb_due_date || "";
     dueDialog.error = "";
     dueDialog.show = true;
@@ -223,6 +236,7 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
     closeWithComment,
     closeMinLength,
     dueDialog,
+    dueFields,
     dueReasonMinLength,
     statusOptions,
     confirmCancel,
