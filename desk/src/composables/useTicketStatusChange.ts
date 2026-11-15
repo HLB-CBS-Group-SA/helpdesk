@@ -118,8 +118,16 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
     date: "",
     error: "",
   });
+  // Labels and minimum per status: Meeting scheduled asks for the meeting date
+  // and whom it is with (cancel_context.due_fields, app 2026-11-15).
+  const dueFields = computed(
+    () => cancelContext.data?.due_fields?.[dueDialog.status] || {}
+  );
   const dueReasonMinLength = computed(
-    () => cancelContext.data?.due_reason_min_length ?? 1
+    () =>
+      dueFields.value.reason_min_length ??
+      cancelContext.data?.due_reason_min_length ??
+      1
   );
 
   function openDueDialog(status: string) {
@@ -223,6 +231,7 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
     closeWithComment,
     closeMinLength,
     dueDialog,
+    dueFields,
     dueReasonMinLength,
     statusOptions,
     confirmCancel,

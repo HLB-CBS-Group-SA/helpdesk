@@ -88,8 +88,8 @@
     </template>
   </Dialog>
 
-  <!-- HLB-FORK: due-date-status — Assigned deliverable, Meeting planned, Deferred and
-       On-hold need a reason and a date, sent with the status (app hd_ticket/due_date.py, #192). -->
+  <!-- HLB-FORK: due-date-status — the dated statuses ask for a reason (or whom a meeting is
+       with) and a date, sent with the status; labels from the server (app due_date.py, #192). -->
   <Dialog
     v-model="change.dueDialog.show"
     :options="{ title: __('Move to {0}', [__(change.dueDialog.status)]) }"
@@ -105,12 +105,16 @@
       <FormControl
         v-model="change.dueDialog.reason"
         type="textarea"
-        :label="__('Reason / Meeting details')"
+        :label="
+          __(change.dueFields.reason_label || 'Reason / Meeting details')
+        "
         :disabled="ticket.setValue.loading"
       />
       <div class="mt-3">
         <div class="mb-1.5 text-xs text-ink-gray-5">
-          {{ __("Due date / Meeting date") }}
+          {{
+            __(change.dueFields.date_label || "Due date / Meeting date")
+          }}
         </div>
         <DateTimePicker
           :value="change.dueDialog.date"

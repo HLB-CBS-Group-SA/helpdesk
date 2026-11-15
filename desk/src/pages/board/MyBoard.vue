@@ -175,12 +175,12 @@
         <FormControl
           v-model="dueDialog.reason"
           type="textarea"
-          :label="__('Reason / Meeting details')"
+          :label="__(dueDialog.reasonLabel)"
           :disabled="setStatus.loading"
         />
         <div class="mt-3">
           <div class="mb-1.5 text-xs text-ink-gray-5">
-            {{ __("Due date / Meeting date") }}
+            {{ __(dueDialog.dateLabel) }}
           </div>
           <DateTimePicker
             :value="dueDialog.date"
@@ -441,6 +441,8 @@ const dueDialog = reactive({
   reason: "",
   date: "",
   minLength: 1,
+  reasonLabel: "",
+  dateLabel: "",
   error: "",
 });
 // Same format as the ticket sidebar's date fields (components/TicketField.vue).
@@ -456,13 +458,17 @@ function move(name: string, status: string) {
     {
       onSuccess(context: any) {
         if ((context?.due_date_statuses || []).includes(status)) {
+          const fields = context.due_fields?.[status] || {};
           Object.assign(dueDialog, {
             show: true,
             ticket: name,
             status,
             reason: "",
             date: "",
-            minLength: context.due_reason_min_length ?? 1,
+            minLength:
+              fields.reason_min_length ?? context.due_reason_min_length ?? 1,
+            reasonLabel: fields.reason_label || "Reason / Meeting details",
+            dateLabel: fields.date_label || "Due date / Meeting date",
             error: "",
           });
           return;
