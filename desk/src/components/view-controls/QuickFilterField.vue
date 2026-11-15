@@ -16,10 +16,12 @@
     :placeholder="filter.label"
     @update:modelValue="(v) => updateFilter(filter, v || '')"
   />
+  <!-- HLB-FORK: filter-all-options — every value, not the first 10 (app #196). -->
   <Link
     v-else-if="filter.type === 'Link'"
     :value="props.value"
     :doctype="filter.options"
+    :page-length="100"
     :placeholder="filter.label"
     @change="(data) => updateFilter(filter, data)"
     class="w-36"

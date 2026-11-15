@@ -153,11 +153,15 @@ export function normalizeFilters(raw: any): FilterCondition[] {
   });
 }
 
+// HLB-FORK: filter-all-options — list every value, not the first 10: there are 21
+// statuses, so the later ones never showed until typed (app #196).
+const LINK_PAGE_LENGTH = 100;
+
 export function useLinkSearch(doctype: string, filters?: Record<string, any>) {
   const results = createResource({
     url: "frappe.desk.search.search_link",
     method: "POST",
-    params: { txt: "", doctype, filters, page_length: 10 },
+    params: { txt: "", doctype, filters, page_length: LINK_PAGE_LENGTH },
     transform: (data: any[]) => {
       const options = data.map((option) => ({
         value: option.value,
@@ -173,7 +177,9 @@ export function useLinkSearch(doctype: string, filters?: Record<string, any>) {
 
   const search = useDebounceFn((txt: string) => {
     if (!doctype) return;
-    results.update({ params: { txt, doctype, filters, page_length: 10 } });
+    results.update({
+      params: { txt, doctype, filters, page_length: LINK_PAGE_LENGTH },
+    });
     results.reload();
   }, 300);
 
