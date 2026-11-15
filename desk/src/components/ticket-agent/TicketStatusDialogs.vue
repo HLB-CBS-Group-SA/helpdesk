@@ -97,9 +97,11 @@
     <template #body-content>
       <p class="text-p-sm text-ink-gray-6 mb-3">
         {{
-          __(
-            "The SLA clock is held, and the ticket is due on this date. The reason is kept on the ticket as an internal comment."
-          )
+          change.dueFields.hint
+            ? __(change.dueFields.hint)
+            : __(
+                "The SLA clock is held, and the ticket is due on this date. The reason is kept on the ticket as an internal comment."
+              )
         }}
       </p>
       <FormControl

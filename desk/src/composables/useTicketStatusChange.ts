@@ -131,8 +131,13 @@ export function useTicketStatusChange(ticket: Ref<any>, onChanged: () => void) {
   );
 
   function openDueDialog(status: string) {
+    // Keep the stored reason only for the same kind of question: an old
+    // reason is not whom a meeting is with.
+    const fields = cancelContext.data?.due_fields || {};
+    const current = fields[ticket.value.doc?.status]?.reason_label;
+    const sameKind = current && current === fields[status]?.reason_label;
     dueDialog.status = status;
-    dueDialog.reason = ticket.value.doc?.hlb_due_reason || "";
+    dueDialog.reason = sameKind ? ticket.value.doc?.hlb_due_reason || "" : "";
     dueDialog.date = ticket.value.doc?.hlb_due_date || "";
     dueDialog.error = "";
     dueDialog.show = true;
