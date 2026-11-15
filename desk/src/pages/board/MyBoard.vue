@@ -158,6 +158,55 @@
         </div>
       </div>
     </div>
+    <!-- HLB-FORK: due-date-status — a card dropped on a status that needs a reason and a
+         date asks for both, as the ticket's status menu does (app #192). -->
+    <Dialog
+      v-model="dueDialog.show"
+      :options="{ title: __('Move to {0}', [__(dueDialog.status)]) }"
+    >
+      <template #body-content>
+        <p class="text-p-sm text-ink-gray-6 mb-3">
+          {{
+            __(
+              "The SLA clock is held, and the ticket is due on this date. The reason is kept on the ticket as an internal comment."
+            )
+          }}
+        </p>
+        <FormControl
+          v-model="dueDialog.reason"
+          type="textarea"
+          :label="__('Reason / Meeting details')"
+          :disabled="setStatus.loading"
+        />
+        <div class="mt-3">
+          <div class="mb-1.5 text-xs text-ink-gray-5">
+            {{ __("Due date / Meeting date") }}
+          </div>
+          <DateTimePicker
+            :value="dueDialog.date"
+            :format="dateTimeFormat"
+            :disabled="setStatus.loading"
+            @change="(v: string) => (dueDialog.date = v)"
+          />
+        </div>
+        <p v-if="dueDialog.error" class="text-p-sm text-ink-red-7 mt-2">
+          {{ dueDialog.error }}
+        </p>
+      </template>
+      <template #actions>
+        <Button
+          class="w-full"
+          variant="solid"
+          :loading="setStatus.loading"
+          :disabled="
+            dueDialog.reason.trim().length < dueDialog.minLength ||
+            !dueDialog.date
+          "
+          :label="__('Move to {0}', [__(dueDialog.status)])"
+          @click="confirmDue"
+        />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -175,13 +224,15 @@ import {
   Button,
   createListResource,
   createResource,
+  DateTimePicker,
+  Dialog,
   Dropdown,
   FormControl,
   toast,
 } from "frappe-ui";
 import { storeToRefs } from "pinia";
 import { useView } from "@/composables/useView";
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Draggable from "vuedraggable";
 
@@ -367,23 +418,84 @@ const columns = computed(() =>
 const setStatus = createResource({
   url: "frappe.client.set_value",
   onSuccess() {
+    dueDialog.show = false;
     tickets.reload();
   },
   onError(error: any) {
-    toast.error(errorText(error, __("Could not move the ticket.")));
+    const message = errorText(error, __("Could not move the ticket."));
+    if (dueDialog.show) dueDialog.error = message;
+    else toast.error(message);
     tickets.reload();
   },
 });
 
+// HLB-FORK: due-date-status — which statuses need a reason and a date depends on
+// the ticket's type, so the server is asked for each move (cancel_context, app #192).
+const moveContext = createResource({
+  url: "company_helpdesk.api.cancel_context",
+});
+const dueDialog = reactive({
+  show: false,
+  ticket: "",
+  status: "",
+  reason: "",
+  date: "",
+  minLength: 1,
+  error: "",
+});
+// Same format as the ticket sidebar's date fields (components/TicketField.vue).
+const dateTimeFormat = `${window.date_format.toUpperCase()} ${
+  window.time_format
+}`;
+
 function move(name: string, status: string) {
   const ticket = tickets.data?.find((t: BoardTicket) => t.name === name);
   if (!ticket || ticket.status === status) return;
-  ticket.status = status; // show it in the new column while the save runs
+  moveContext.submit(
+    { ticket: name },
+    {
+      onSuccess(context: any) {
+        if ((context?.due_date_statuses || []).includes(status)) {
+          Object.assign(dueDialog, {
+            show: true,
+            ticket: name,
+            status,
+            reason: "",
+            date: "",
+            minLength: context.due_reason_min_length ?? 1,
+            error: "",
+          });
+          return;
+        }
+        save(ticket, { status });
+      },
+      onError(error: any) {
+        toast.error(errorText(error, __("Could not move the ticket.")));
+      },
+    }
+  );
+}
+
+function confirmDue() {
+  const ticket = tickets.data?.find(
+    (t: BoardTicket) => t.name === dueDialog.ticket
+  );
+  const reason = dueDialog.reason.trim();
+  if (!ticket || reason.length < dueDialog.minLength || !dueDialog.date) return;
+  dueDialog.error = "";
+  save(ticket, {
+    status: dueDialog.status,
+    hlb_due_reason: reason,
+    hlb_due_date: dueDialog.date,
+  });
+}
+
+function save(ticket: BoardTicket, values: Record<string, string>) {
+  ticket.status = values.status; // show it in the new column while the save runs
   setStatus.submit({
     doctype: "HD Ticket",
-    name,
-    fieldname: "status",
-    value: status,
+    name: ticket.name,
+    fieldname: values,
   });
 }
 

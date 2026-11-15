@@ -88,8 +88,8 @@
     </template>
   </Dialog>
 
-  <!-- HLB-FORK: due-date-status — Scheduled task, Meeting planned, Suspended and
-       Delayed need a reason and a date, sent with the status (app hd_ticket/due_date.py, #192). -->
+  <!-- HLB-FORK: due-date-status — Assigned deliverable, Meeting planned, Deferred and
+       On-hold need a reason and a date, sent with the status (app hd_ticket/due_date.py, #192). -->
   <Dialog
     v-model="change.dueDialog.show"
     :options="{ title: __('Move to {0}', [__(change.dueDialog.status)]) }"
