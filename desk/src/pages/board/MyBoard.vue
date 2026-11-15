@@ -341,7 +341,7 @@ const DEFAULT_ORDER = [
   "In progress",
   "Pending approval",
   "Awaiting feedback",
-  "Meeting planned",
+  "Meeting scheduled",
   "Pending Procurement",
   "Escalated",
   "Unassigned",
