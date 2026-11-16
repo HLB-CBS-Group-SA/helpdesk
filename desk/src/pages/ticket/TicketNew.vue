@@ -177,7 +177,8 @@
                 theme="gray"
                 variant="solid"
                 :disabled="
-                  (bodyRequired && $refs.editor?.editor?.isEmpty) ||
+                  (bodyRequired &&
+                    ($refs.editor?.editor?.isEmpty || bodyUntouched)) ||
                   ticket.loading ||
                   !subject
                 "
@@ -211,7 +212,8 @@
               theme="gray"
               variant="solid"
               :disabled="
-                (bodyRequired && $refs.editor?.editor?.isEmpty) ||
+                (bodyRequired &&
+                  ($refs.editor?.editor?.isEmpty || bodyUntouched)) ||
                 ticket.loading ||
                 !subject
               "
@@ -479,6 +481,26 @@ const bodyRequired = computed(
   () => !OPTIONAL_BODY.has(currentSubtype.value) && !isProcurement.value
 );
 
+// HLB-FORK: editor-hint — a type's hlb_body_template starts an empty body (#210),
+// goes again on a type change while untouched, and alone counts as no body.
+const textOf = (html: string) => (html || "").replace(/<[^>]*>/g, "").trim();
+const bodyTemplateOf = (type?: string) =>
+  (type && ticketTypeResource.dataMap?.[type]?.hlb_body_template) || "";
+const bodyUntouched = computed(() => {
+  const template = bodyTemplateOf(
+    (templateFields as Record<string, string>)["ticket_type"]
+  );
+  return !!template && textOf(description.value) === textOf(template);
+});
+watch(
+  () => (templateFields as Record<string, string>)["ticket_type"],
+  (now, before) => {
+    const current = textOf(description.value);
+    if (current && current !== textOf(bodyTemplateOf(before))) return;
+    description.value = bodyTemplateOf(now);
+  }
+);
+
 const editorHint = computed(() => {
   const fields = templateFields as Record<string, string>;
   // Sub-type first: it is the more specific answer, so a type-wide prompt never
@@ -617,7 +639,8 @@ const ticketPriorityResource = createListResource({
 const ticketTypeResource = createListResource({
   doctype: "HD Ticket Type",
   // HLB-FORK: request-spec — hlb_spec is our Custom Field on HD Ticket Type.
-  fields: ["name", "description", "hlb_spec"],
+  // HLB-FORK: editor-hint — so is hlb_body_template, the body to start with.
+  fields: ["name", "description", "hlb_spec", "hlb_body_template"],
   auto: true,
   cache: "ticketTypes",
 });
@@ -642,30 +665,11 @@ const ticketTypeNotice = computed(() => {
 // and will be rewritten as the SOP settles, and none of that should need a
 // fork commit, a tag and a rebuild.
 // See customisations.manifest.json id=ui-request-spec.
-// HLB-FORK: request-spec — sub-types whose specification differs from their
-// ticket type's. Keyed on the sub-type VALUE like EDITOR_HINTS above, because
-// those values are already unique across the whole form.
-//
-// These live here and not on a record because a sub-type IS a string in a
-// Select — there is no per-sub-type document to hang a field on. The type-level
-// default still comes from HD Ticket Type.hlb_spec, so only the exceptions cost
-// a fork commit.
-const SUBTYPE_SPECS: Record<string, string> = {
-  "Design and Implementation":
-    "Please enter all the information related to the request as well as all client details and all systems in scope, in the below text-area.",
-  "Operating Effectiveness":
-    "Please enter all the information related to the request as well as all client details and all systems in scope, in the below text-area.",
-};
-
 const requestSpec = computed<string[]>(() => {
   const fields = templateFields as Record<string, string>;
   const selected = fields["ticket_type"];
   if (!selected) return [];
-  // Sub-type first: it is the more specific answer, so a type-wide spec never
-  // masks one written for a particular sub-type.
-  const override = SUBTYPE_SPECS[currentSubtype.value];
-  const raw =
-    override || ticketTypeResource.dataMap?.[selected]?.hlb_spec || "";
+  const raw = ticketTypeResource.dataMap?.[selected]?.hlb_spec || "";
   return raw
     .split("\n")
     .map((line: string) => line.trim())
@@ -760,6 +764,9 @@ const ticket = createResource({
       ) || [];
     const toVerify: any[] = [...fields, "subject"];
     if (bodyRequired.value) toVerify.push("description");
+    // HLB-FORK: editor-hint — the type's starting text alone is no body.
+    if (bodyRequired.value && bodyUntouched.value)
+      return __("Description is required");
     for (const field of toVerify) {
       if (!params.doc[field.fieldname || field]) {
         const label = field.label ? __(field.label) : field;
