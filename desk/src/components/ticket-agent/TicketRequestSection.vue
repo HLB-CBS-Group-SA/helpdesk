@@ -58,6 +58,13 @@ watch(
   () => props.ticketId,
   () => request.reload()
 );
+// HLB-FORK: request-form — a type change shows the new type's form at once (#210).
+watch(
+  () => props.context?.ticket_type,
+  (now, before) => {
+    if (before !== undefined && now !== before) request.reload();
+  }
+);
 
 const save = createResource({
   url: "company_helpdesk.api.save_ticket_request",
